@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiResponse } from '../utils/apiResponse';
-import { authService } from '../services/auth';
+import * as authService from '../services/auth';
 import { HttpStatus } from '../constants/httpstatus';
 import { ApiError } from '../utils/apiError';
 import { Role } from '../constants/role';
-import { adminRepository } from '../repositories/admin.repository';
-import { userRepository } from '../repositories/user.repository';
+import * as adminRepository from '../repositories/admin.repository';
+import * as userRepository from '../repositories/user.repository';
 
 export const register = asyncHandler(async (req: Request, res: Response) => {
   const user = await authService.register(req.body);

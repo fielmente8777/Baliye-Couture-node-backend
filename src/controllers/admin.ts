@@ -4,8 +4,8 @@ import { asyncHandler } from '@utils/asyncHandler';
 import { ApiResponse } from '@utils/apiResponse';
 import { HttpStatus } from '@constants/httpstatus';
 import { ApiError } from '@utils/apiError';
-import { adminRepository } from '@repositories/admin.repository';
-import { userRepository } from '@repositories/user.repository';
+import * as adminRepository from '@repositories/admin.repository';
+import * as userRepository from '@repositories/user.repository';
 import { getPagination, buildMeta, buildSearchFilter } from '@utils/pagination';
 
 export const getAdminProfile = asyncHandler(async (req: Request, res: Response) => {

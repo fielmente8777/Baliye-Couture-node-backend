@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/apiError';
-import { orderService } from '../services/order';
+import * as orderService from '../services/order';
 import { HttpStatus } from '../constants/httpstatus';
 import { ApiResponse } from '../utils/apiResponse';
 import { buildMeta, getPagination } from '../utils/pagination';

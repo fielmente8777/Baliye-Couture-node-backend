@@ -17,7 +17,16 @@ import { errorHandler, notFoundHandler } from './middlewares/error';
 export function createApp(): Application {
   const app = express();
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      /**
+       * swagger-ui-express injects inline scripts/styles; the default CSP
+       * blocks them and the docs render blank. Disabled globally here because
+       * this API serves JSON, not HTML — revisit if you ever serve a UI.
+       */
+      contentSecurityPolicy: false,
+    })
+  );
   app.use(
     cors({
       origin: env.corsOrigin,
@@ -38,7 +47,30 @@ export function createApp(): Application {
     res.status(200).json({ success: true, message: 'OK', data: { uptime: process.uptime() } });
   });
 
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  /**
+   * Raw spec — import this URL straight into Postman or Insomnia.
+   * Registered before the UI so it is not swallowed by the /api-docs mount.
+   */
+  app.get('/api-docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+
+  app.use(
+    '/api-docs',
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerSpec, {
+      explorer: true,
+      customSiteTitle: 'Baliye API docs',
+      swaggerOptions: {
+        /** Keeps the pasted Bearer token across page reloads. */
+        persistAuthorization: true,
+        docExpansion: 'none',
+        filter: true,
+        tryItOutEnabled: true,
+      },
+    })
+  );
 
   app.use(env.apiPrefix, routes);
 

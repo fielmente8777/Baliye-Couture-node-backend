@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
-import { measurementService } from '../services/measurement';
+import * as measurementService from '../services/measurement';
 import { HttpStatus } from '../constants/httpstatus';
 import { ApiResponse } from '../utils/apiResponse';
 import { ApiError } from '../utils/apiError';

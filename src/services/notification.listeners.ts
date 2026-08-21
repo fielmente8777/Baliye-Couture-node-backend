@@ -1,7 +1,7 @@
 import { logger } from "../config/logger";
 import { NotificationChannel, NotificationEvent } from "../constants/notification";
 import { notificationEvents, OrderCancelledEvent, OrderPlacedEvent, OrderStatusUpdatedEvent } from "../interfaces/events";
-import { notificationService } from "./notifications";
+import * as notificationService from "./notifications";
 
 /** Registers all domain-event -> notification mappings. Call once at app startup. */
 export function registerNotificationListeners(): void {

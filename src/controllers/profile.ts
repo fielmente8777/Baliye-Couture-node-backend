@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/apiError';
-import { profileService } from '../services/profile';
+import * as profileService from '../services/profile';
 import { ApiResponse } from '../utils/apiResponse';
 import { HttpStatus } from '../constants/httpstatus';
 

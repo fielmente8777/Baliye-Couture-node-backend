@@ -8,18 +8,17 @@ const client =
     ? twilio(env.twilio.accountSid, env.twilio.authToken)
     : null;
 
-export class SmsChannel implements NotificationChannelHandler {
-  async send(payload: NotificationPayload): Promise<void> {
-    if (!client) {
-      logger.warn('Twilio not configured — skipping SMS send (dev mode)');
-      return;
-    }
-    await client.messages.create({
-      to: payload.to,
-      from: env.twilio.fromNumber,
-      body: `${payload.title}\n${payload.message}`,
-    });
+export async function send(payload: NotificationPayload): Promise<void> {
+  if (!client) {
+    logger.warn('Twilio not configured — skipping SMS send (dev mode)');
+    return;
   }
+
+  await client.messages.create({
+    to: payload.to,
+    from: env.twilio.fromNumber,
+    body: `${payload.title}\n${payload.message}`,
+  });
 }
 
-export const smsChannel = new SmsChannel();
+export const smsChannel: NotificationChannelHandler = { send };

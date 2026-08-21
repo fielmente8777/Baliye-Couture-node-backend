@@ -1,13 +1,10 @@
 import { IOrderTracking, OrderTrackingModel } from '@models/tracking';
 
-class OrderTrackingRepository {
-  create(data: Partial<IOrderTracking>) {
-    return OrderTrackingModel.create(data);
-  }
-
-  findByOrderId(orderId: string) {
-    return OrderTrackingModel.find({ orderId }).sort({ createdAt: 1 }).exec();
-  }
+export function create(data: Partial<IOrderTracking>) {
+  return OrderTrackingModel.create(data);
 }
 
-export const orderTrackingRepository = new OrderTrackingRepository();
+export function findByOrderId(orderId: string) {
+  return OrderTrackingModel.find({ orderId }).sort({ createdAt: 1 }).exec();
+}
+
