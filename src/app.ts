@@ -1,18 +1,18 @@
-import express, { Application } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import hpp from 'hpp';
-import mongoSanitize from 'express-mongo-sanitize';
-import swaggerUi from 'swagger-ui-express';
-import path from 'path';
+import express, { Application } from "express";
+import cors from "cors";
+import helmet from "helmet";
+import compression from "compression";
+import hpp from "hpp";
+import mongoSanitize from "express-mongo-sanitize";
+import swaggerUi from "swagger-ui-express";
+import path from "path";
 
-import routes from './routes';
-import { env } from './config/env';
-import { swaggerSpec } from './config/swagger';
-import { requestLogger } from './middlewares/logger';
-import { globalRateLimiter } from './middlewares/ratelimit';
-import { errorHandler, notFoundHandler } from './middlewares/error';
+import routes from "./routes";
+import { env } from "./config/env";
+import { swaggerSpec } from "./config/swagger";
+import { requestLogger } from "./middlewares/logger";
+import { globalRateLimiter } from "./middlewares/ratelimit";
+import { errorHandler, notFoundHandler } from "./middlewares/error";
 
 export function createApp(): Application {
   const app = express();
@@ -25,51 +25,72 @@ export function createApp(): Application {
        * this API serves JSON, not HTML — revisit if you ever serve a UI.
        */
       contentSecurityPolicy: false,
-    })
+    }),
   );
   app.use(
     cors({
-      origin: env.corsOrigin,
+      origin: (origin, callback) => {
+        // Non-browser callers (Postman, server-to-server, health checks) send no Origin.
+        if (!origin) return callback(null, true);
+
+        if (env.corsOrigin.includes(origin)) return callback(null, true);
+
+        // Vercel generates a new hostname per deployment — allow previews of this project.
+        if (
+          /^https:\/\/baliyacotournew-[a-z0-9-]+\.vercel\.app$/.test(origin)
+        ) {
+          return callback(null, true);
+        }
+
+        return callback(new Error(`Origin ${origin} not allowed by CORS`));
+      },
       credentials: true,
-    })
+    }),
   );
   app.use(compression());
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
   app.use(mongoSanitize());
   app.use(hpp());
   app.use(requestLogger);
   app.use(globalRateLimiter);
 
-  app.use('/uploads', express.static(path.resolve(process.cwd(), env.upload.dir)));
+  app.use(
+    "/uploads",
+    express.static(path.resolve(process.cwd(), env.upload.dir)),
+  );
 
-  app.get('/health', (_req, res) => {
-    res.status(200).json({ success: true, message: 'OK', data: { uptime: process.uptime() } });
+  app.get("/health", (_req, res) => {
+    res.status(200).json({
+      success: true,
+      message: "OK",
+      data: { uptime: process.uptime() },
+    });
   });
 
   /**
    * Raw spec — import this URL straight into Postman or Insomnia.
    * Registered before the UI so it is not swallowed by the /api-docs mount.
    */
-  app.get('/api-docs.json', (_req, res) => {
-    res.setHeader('Content-Type', 'application/json');
+  app.get("/api-docs.json", (_req, res) => {
+    res.setHeader("Content-Type", "application/json");
     res.send(swaggerSpec);
   });
 
   app.use(
-    '/api-docs',
+    "/api-docs",
     swaggerUi.serve,
     swaggerUi.setup(swaggerSpec, {
       explorer: true,
-      customSiteTitle: 'Baliye API docs',
+      customSiteTitle: "Baliye API docs",
       swaggerOptions: {
         /** Keeps the pasted Bearer token across page reloads. */
         persistAuthorization: true,
-        docExpansion: 'none',
+        docExpansion: "none",
         filter: true,
         tryItOutEnabled: true,
       },
-    })
+    }),
   );
 
   app.use(env.apiPrefix, routes);
