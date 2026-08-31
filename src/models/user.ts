@@ -13,6 +13,7 @@ export interface IUser extends Document {
   country?: string;
   profileImage?: string;
   googleId?: string;
+  microsoftId?: string;
   isPhoneVerified: boolean;
   isEmailVerified: boolean;
   isActive: boolean;
@@ -35,6 +36,7 @@ const userSchema = new Schema<IUser>(
     country: { type: String, trim: true },
     profileImage: { type: String },
     googleId: { type: String, unique: true, sparse: true },
+    microsoftId: { type: String, unique: true, sparse: true },
     isPhoneVerified: { type: Boolean, default: false },
     isEmailVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },

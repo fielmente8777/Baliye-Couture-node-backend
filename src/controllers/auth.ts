@@ -28,6 +28,11 @@ export const googleLogin = asyncHandler(async (req: Request, res: Response) => {
   ApiResponse.success(res, HttpStatus.OK, 'Login successful', tokens);
 });
 
+export const microsoftLogin = asyncHandler(async (req: Request, res: Response) => {
+  const tokens = await authService.microsoftLogin(req.body.accessToken);
+  ApiResponse.success(res, HttpStatus.OK, 'Login successful', tokens);
+});
+
 export const adminLogin = asyncHandler(async (req: Request, res: Response) => {
   const tokens = await authService.adminLogin(req.body.email, req.body.password);
   ApiResponse.success(res, HttpStatus.OK, 'Login successful', tokens);

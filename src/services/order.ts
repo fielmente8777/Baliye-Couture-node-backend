@@ -2,9 +2,12 @@ import { randomUUID } from 'crypto';
 import * as orderRepository from '@repositories/order.repository';
 import * as orderTrackingRepository from '@repositories/orderTracking.repository';
 import * as cartRepository from '@repositories/cart.repository';
-import * as userMeasurementRepository from '@repositories/userMeasurement.repository';
+import * as measurementProfileRepository from '@repositories/measurementProfile.repository';
+import * as measurementService from './measurement';
+import * as addressService from './address';
 import * as userRepository from '@repositories/user.repository';
 import { ApiError } from '@utils/apiError';
+import { IMeasurementProfile } from '@models/measurementprofile';
 import { OrderStatus, ORDER_STATUS_FLOW, TERMINAL_ORDER_STATUSES } from '@constants/orderstatus';
 import {
   emitOrderCancelled,
@@ -16,23 +19,81 @@ function generateOrderNumber(): string {
   return `ORD-${Date.now()}-${randomUUID().slice(0, 6).toUpperCase()}`;
 }
 
-export async function placeOrder(userId: string, shippingAddress?: string) {
+export async function placeOrder(
+  userId: string,
+  shippingAddress?: string,
+  measurementProfileId?: string,
+  shippingAddressId?: string
+) {
   const cart = await cartRepository.findByUser(userId);
   if (!cart || cart.items.length === 0) throw ApiError.badRequest('Cart is empty');
 
-  const measurement = await userMeasurementRepository.findByUserId(userId);
-  if (!measurement || measurement.values.length === 0) {
+  /**
+   * Resolution order for each line: the profile chosen on the cart item, then
+   * the one passed with the order, then the user's default. A single-profile
+   * customer never chooses anything; a customer ordering for two people can
+   * set it per item.
+   */
+  const orderLevel = measurementProfileId
+    ? await measurementService.assertOwnedProfile(measurementProfileId, userId)
+    : await measurementService.getDefaultProfile(userId);
+
+  const profileCache = new Map<string, IMeasurementProfile>();
+  if (orderLevel) profileCache.set(orderLevel._id.toString(), orderLevel);
+
+  const items = [];
+
+  for (const item of cart.items) {
+    const itemProfileId = item.measurementProfileId?.toString();
+
+    let profile = itemProfileId ? profileCache.get(itemProfileId) ?? null : orderLevel;
+
+    if (itemProfileId && !profile) {
+      profile = await measurementService.assertOwnedProfile(itemProfileId, userId);
+      profileCache.set(itemProfileId, profile);
+    }
+
+    if (!profile || profile.values.length === 0) {
+      throw ApiError.badRequest('Please add your body measurements before placing an order');
+    }
+
+    items.push({
+      suitDesignId: item.suitDesignId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      subtotal: item.unitPrice * item.quantity,
+      measurementProfileId: profile._id,
+      /* Frozen: renaming or deleting the profile must not alter this order. */
+      measurementSnapshot: {
+        profileName: profile.profileName,
+        values: profile.values.map((v) => ({ name: v.name, value: v.value, unit: v.unit })),
+      },
+    });
+  }
+
+  const measurement = orderLevel ?? (await measurementService.getDefaultProfile(userId));
+  if (!measurement) {
     throw ApiError.badRequest('Please add your body measurements before placing an order');
   }
 
-  const items = cart.items.map((item) => ({
-    suitDesignId: item.suitDesignId,
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    subtotal: item.unitPrice * item.quantity,
-  }));
-
   const totalAmount = items.reduce((sum, i) => sum + i.subtotal, 0);
+
+  /**
+   * Address resolution mirrors measurements: an explicit id, then a raw string
+   * for a one-off delivery, then the user's default. Flattened to text on the
+   * order so a later edit cannot rewrite where a past order was sent.
+   */
+  const address = shippingAddressId
+    ? await addressService.getAddressById(shippingAddressId, userId)
+    : shippingAddress
+      ? null
+      : await addressService.getDefaultAddress(userId);
+
+  const resolvedAddress = address ? addressService.formatAddress(address) : shippingAddress;
+
+  if (!resolvedAddress) {
+    throw ApiError.badRequest('Please add a shipping address before placing an order');
+  }
 
   const order = await orderRepository.create({
     orderNumber: generateOrderNumber(),
@@ -40,7 +101,8 @@ export async function placeOrder(userId: string, shippingAddress?: string) {
     items,
     measurementSnapshotId: measurement._id,
     totalAmount,
-    shippingAddress,
+    shippingAddressId: address?._id,
+    shippingAddress: resolvedAddress,
     status: OrderStatus.PENDING,
   });
 

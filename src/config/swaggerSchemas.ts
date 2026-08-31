@@ -1,7 +1,9 @@
 import { AnyZodObject, ZodTypeAny } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+import * as addressTypes from '../types/address';
 import * as authTypes from '../types/auth';
+import * as customDesignTypes from '../types/customdesign';
 import * as cartTypes from '../types/cart';
 import * as designTypes from '../types/design';
 import * as measurementTypes from '../types/measurement';
@@ -20,17 +22,25 @@ const bodySchemas: Record<string, AnyZodObject> = {
   VerifyOtpBody: authTypes.verifyOtpSchema,
   AdminLoginBody: authTypes.adminLoginSchema,
   GoogleLoginBody: authTypes.googleLoginSchema,
+  MicrosoftLoginBody: authTypes.microsoftLoginSchema,
   RefreshTokenBody: authTypes.refreshTokenSchema,
 
   UpdateProfileBody: profileTypes.updateProfileSchema,
 
+  CreateAddressBody: addressTypes.createAddressSchema,
+  UpdateAddressBody: addressTypes.updateAddressSchema,
+
   CreateMeasurementTemplateBody: measurementTypes.createMeasurementTemplateSchema,
   UpdateMeasurementTemplateBody: measurementTypes.updateMeasurementTemplateSchema,
-  UpdateUserMeasurementBody: measurementTypes.updateUserMeasurementSchema,
+  CreateMeasurementProfileBody: measurementTypes.createMeasurementProfileSchema,
+  UpdateMeasurementProfileBody: measurementTypes.updateMeasurementProfileSchema,
 
   CreateDesignOptionBody: designTypes.createDesignOptionSchema,
   UpdateDesignOptionBody: designTypes.updateDesignOptionSchema,
   CreateSuitDesignBody: designTypes.createSuitDesignSchema,
+
+  QuotePriceBody: customDesignTypes.quotePriceSchema,
+  CreateCustomDesignBody: customDesignTypes.createDesignSchema,
   UpdateSuitDesignBody: designTypes.updateSuitDesignSchema,
 
   AddToCartBody: cartTypes.addToCartSchema,

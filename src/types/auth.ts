@@ -13,6 +13,12 @@ export const verifyOtpSchema = z.object({
   }),
 });
 
+export const microsoftLoginSchema = z.object({
+  body: z.object({
+    accessToken: z.string().min(1, 'Microsoft access token is required'),
+  }),
+});
+
 export const googleLoginSchema = z.object({
   body: z.object({
     idToken: z.string().min(10),

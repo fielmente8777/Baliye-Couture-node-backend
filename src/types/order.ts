@@ -3,7 +3,12 @@ import { OrderStatus } from '../constants/orderstatus';
 
 export const createOrderSchema = z.object({
   body: z.object({
+    /** A saved address. Defaults to the user's default address when omitted. */
+    shippingAddressId: z.string().length(24).optional(),
+    /** Escape hatch for a one-off address the user does not want saved. */
     shippingAddress: z.string().max(300).optional(),
+    /** Whose measurements to tailor to. Defaults to the user's default profile. */
+    measurementProfileId: z.string().length(24).optional(),
   }),
 });
 

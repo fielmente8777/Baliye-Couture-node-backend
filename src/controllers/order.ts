@@ -10,7 +10,12 @@ import { OrderStatus } from '../constants/orderstatus';
 // ---- User ----
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.authUser) throw ApiError.unauthorized();
-  const order = await orderService.placeOrder(req.authUser.id, req.body.shippingAddress);
+  const order = await orderService.placeOrder(
+    req.authUser.id,
+    req.body.shippingAddress,
+    req.body.measurementProfileId,
+    req.body.shippingAddressId
+  );
   ApiResponse.success(res, HttpStatus.CREATED, 'Order placed successfully', order);
 });
 

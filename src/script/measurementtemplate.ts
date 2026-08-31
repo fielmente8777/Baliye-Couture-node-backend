@@ -3,19 +3,25 @@ import { connectDB, disconnectDB } from '@config/db';
 import { logger } from '@config/logger';
 import { MeasurementTemplateModel } from '@models/measurementtemplate';
 
+/**
+ * The twelve fields the Figma's measurement form and mannequin hotspots use
+ * (Stensil-3 through -7), in the order they are rendered. The frontend keys its
+ * hotspot coordinates off these names, so renaming one here means updating
+ * MEASUREMENT_UI_META on the frontend to match.
+ */
 const DEFAULT_TEMPLATES = [
-  { name: 'Neck', unit: 'in', displayOrder: 1 },
-  { name: 'Chest', unit: 'in', displayOrder: 2 },
+  { name: 'Chest', unit: 'in', displayOrder: 1 },
+  { name: 'Sleeve', unit: 'in', displayOrder: 2 },
   { name: 'Shoulder', unit: 'in', displayOrder: 3 },
-  { name: 'Sleeve', unit: 'in', displayOrder: 4 },
-  { name: 'Waist', unit: 'in', displayOrder: 5 },
-  { name: 'Hip', unit: 'in', displayOrder: 6 },
-  { name: 'Inseam', unit: 'in', displayOrder: 7 },
-  { name: 'Outseam', unit: 'in', displayOrder: 8 },
-  { name: 'Length', unit: 'in', displayOrder: 9 },
-  { name: 'Cuff', unit: 'in', displayOrder: 10 },
-  { name: 'Bicep', unit: 'in', displayOrder: 11 },
-  { name: 'Wrist', unit: 'in', displayOrder: 12 },
+  { name: 'Bicep', unit: 'in', displayOrder: 4 },
+  { name: 'Wrist Around', unit: 'in', displayOrder: 5 },
+  { name: 'Front Raise', unit: 'in', displayOrder: 6 },
+  { name: 'Waist', unit: 'in', displayOrder: 7 },
+  { name: 'Back Raise', unit: 'in', displayOrder: 8 },
+  { name: 'Hip', unit: 'in', displayOrder: 9 },
+  { name: 'Thigh', unit: 'in', displayOrder: 10 },
+  { name: 'Leg Length', unit: 'in', displayOrder: 11 },
+  { name: 'Leg Opening', unit: 'in', displayOrder: 12 },
 ] as const;
 
 async function seedMeasurementTemplates() {

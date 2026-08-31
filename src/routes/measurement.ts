@@ -4,18 +4,22 @@ import { authorize } from '../middlewares/role';
 import { Role } from '../constants/role';
 import { validate } from '../middlewares/validate';
 import {
+  createMeasurementProfileSchema,
   createMeasurementTemplateSchema,
   idParamSchema,
+  updateMeasurementProfileSchema,
   updateMeasurementTemplateSchema,
-  updateUserMeasurementSchema,
 } from '../types/measurement';
 import {
+  createMeasurementProfile,
   createMeasurementTemplate,
+  deleteMeasurementProfile,
   deleteMeasurementTemplate,
+  getMeasurementProfile,
+  getMeasurementProfiles,
   getMeasurementTemplates,
-  getUserMeasurements,
+  updateMeasurementProfile,
   updateMeasurementTemplate,
-  updateUserMeasurements,
 } from '../controllers/measurement';
 
 const measurementRoutes = Router();
@@ -60,7 +64,11 @@ measurementRoutes.post(
   validate(createMeasurementTemplateSchema),
   createMeasurementTemplate
 );
-measurementRoutes.get('/template', authenticate, authorize(Role.ADMIN), getMeasurementTemplates);
+/**
+ * Readable by any signed-in user: the storefront cannot render the measurement
+ * form without knowing which fields exist. Only writes stay admin-only.
+ */
+measurementRoutes.get('/template', authenticate, getMeasurementTemplates);
 
 /**
  * @openapi
@@ -108,37 +116,98 @@ measurementRoutes.delete(
  * @openapi
  * /measurements:
  *   get:
- *     summary: (User) Get my saved measurements
+ *     summary: (User) List my saved measurement profiles
  *     tags: [Measurements]
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200:
- *         description: The user's measurement record
+ *         description: Profiles, default first
  *         content:
  *           application/json:
  *             schema: { $ref: '#/components/schemas/SuccessResponse' }
  *       401: { $ref: '#/components/responses/Unauthorized' }
- *   put:
- *     summary: (User) Create or replace my measurements
- *     description: Upserts — there is one measurement record per user.
+ *   post:
+ *     summary: (User) Save a new measurement profile
+ *     description: The first profile a user saves becomes their default automatically.
  *     tags: [Measurements]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema: { $ref: '#/components/schemas/UpdateUserMeasurementBody' }
+ *           schema: { $ref: '#/components/schemas/CreateMeasurementProfileBody' }
  *     responses:
- *       200: { description: Measurements saved }
+ *       201: { description: Profile created }
  *       400: { $ref: '#/components/responses/ValidationError' }
+ *       409: { description: A profile with that name already exists }
  */
-measurementRoutes.get('/', authenticate, authorize(Role.USER), getUserMeasurements);
-measurementRoutes.put(
+measurementRoutes.get('/', authenticate, authorize(Role.USER), getMeasurementProfiles);
+measurementRoutes.post(
   '/',
   authenticate,
   authorize(Role.USER),
-  validate(updateUserMeasurementSchema),
-  updateUserMeasurements
+  validate(createMeasurementProfileSchema),
+  createMeasurementProfile
+);
+
+/**
+ * @openapi
+ * /measurements/{id}:
+ *   get:
+ *     summary: (User) Get one of my measurement profiles
+ *     tags: [Measurements]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdParam'
+ *     responses:
+ *       200: { description: Profile }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ *   put:
+ *     summary: (User) Update one of my measurement profiles
+ *     tags: [Measurements]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdParam'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateMeasurementProfileBody' }
+ *     responses:
+ *       200: { description: Profile updated }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ *       409: { description: A profile with that name already exists }
+ *   delete:
+ *     summary: (User) Delete one of my measurement profiles
+ *     description: Soft delete. If it was the default, the next profile becomes default.
+ *     tags: [Measurements]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdParam'
+ *     responses:
+ *       200: { description: Profile deleted }
+ *       404: { $ref: '#/components/responses/NotFound' }
+ */
+measurementRoutes.get(
+  '/:id',
+  authenticate,
+  authorize(Role.USER),
+  validate(idParamSchema),
+  getMeasurementProfile
+);
+measurementRoutes.put(
+  '/:id',
+  authenticate,
+  authorize(Role.USER),
+  validate(updateMeasurementProfileSchema),
+  updateMeasurementProfile
+);
+measurementRoutes.delete(
+  '/:id',
+  authenticate,
+  authorize(Role.USER),
+  validate(idParamSchema),
+  deleteMeasurementProfile
 );
 
 export default measurementRoutes;

@@ -89,6 +89,54 @@ export async function verifyOtpAndLogin(phone: string, code: string) {
   return issueTokens(user._id.toString(), Role.USER);
 }
 
+/**
+ * Microsoft / Outlook login.
+ *
+ * The client sends a Graph access token from MSAL. We do not trust it: we call
+ * Graph with it, and the profile Graph returns is the proof. A forged token
+ * simply fails that call.
+ */
+export async function microsoftLogin(accessToken: string) {
+  const response = await fetch('https://graph.microsoft.com/v1.0/me', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) throw ApiError.unauthorized('Invalid Microsoft token');
+
+  const profile = (await response.json()) as {
+    id: string;
+    displayName?: string;
+    mail?: string;
+    userPrincipalName?: string;
+  };
+
+  const email = profile.mail || profile.userPrincipalName;
+  if (!profile.id) throw ApiError.unauthorized('Invalid Microsoft token');
+
+  let user = await userRepository.findByMicrosoftId(profile.id);
+
+  if (!user && email) {
+    user = await userRepository.findByEmail(email);
+  }
+
+  if (!user) {
+    user = await userRepository.create({
+      microsoftId: profile.id,
+      email,
+      name: profile.displayName,
+      isEmailVerified: true,
+    });
+  } else if (!user.microsoftId) {
+    user = await userRepository.updateById(user._id.toString(), { microsoftId: profile.id });
+  }
+
+  if (!user) throw ApiError.internal('Failed to create or fetch user');
+
+  await userRepository.updateById(user._id.toString(), { lastLoginAt: new Date() });
+
+  return issueTokens(user._id.toString(), Role.USER);
+}
+
 export async function googleLogin(idToken: string) {
   const ticket = await googleClient.verifyIdToken({
     idToken,

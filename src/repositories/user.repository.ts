@@ -20,6 +20,10 @@ export function findByGoogleId(googleId: string) {
   return UserModel.findOne({ googleId, isDeleted: false }).exec();
 }
 
+export function findByMicrosoftId(microsoftId: string) {
+  return UserModel.findOne({ microsoftId, isDeleted: false }).exec();
+}
+
 export function findAll(filter: Record<string, unknown> = {}, skip = 0, limit = 10) {
   return UserModel.find({ ...filter, isDeleted: false })
     .sort({ createdAt: -1 })

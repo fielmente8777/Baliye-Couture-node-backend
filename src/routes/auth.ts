@@ -3,6 +3,7 @@ import { validate } from '../middlewares/validate';
 import {
   adminLoginSchema,
   googleLoginSchema,
+  microsoftLoginSchema,
   refreshTokenSchema,
   registerSchema,
   sendOtpSchema,
@@ -14,6 +15,7 @@ import {
   adminLogin,
   getMe,
   googleLogin,
+  microsoftLogin,
   logout,
   refreshToken,
   register,
@@ -153,6 +155,37 @@ authRoutes.post('/login', validate(adminLoginSchema), adminLogin);
  *       401: { description: Google token could not be verified }
  */
 authRoutes.post('/google', validate(googleLoginSchema), googleLogin);
+
+/**
+ * @openapi
+ * /auth/microsoft:
+ *   post:
+ *     summary: Microsoft / Outlook login
+ *     description: >
+ *       Send the Microsoft Graph access token obtained by MSAL in the browser.
+ *       The server validates it by calling Graph `/me` and creates the account
+ *       on first sign-in.
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/MicrosoftLoginBody' }
+ *     responses:
+ *       200:
+ *         description: Logged in
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - type: object
+ *                   properties:
+ *                     data: { $ref: '#/components/schemas/AuthTokens' }
+ *       401: { description: Microsoft token could not be verified }
+ */
+authRoutes.post('/microsoft', validate(microsoftLoginSchema), microsoftLogin);
 
 /**
  * @openapi
