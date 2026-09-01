@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
 import * as userRepository from "@repositories/user.repository";
 import * as adminRepository from "@repositories/admin.repository";
@@ -15,7 +15,6 @@ import { Role } from "@constants/role";
 import { env } from "@config/env";
 import { logger } from "@config/logger";
 import { smsChannel } from "@interfaces/sms";
-import { sendWhatsAppOtp } from "./whatsapp";
 
 const googleClient = new OAuth2Client(env.google.clientId);
 const OTP_MAX_ATTEMPTS = 5;

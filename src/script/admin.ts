@@ -1,5 +1,5 @@
 import 'tsconfig-paths/register';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { connectDB, disconnectDB } from '@config/db';
 import { logger } from '@config/logger';
 import { env } from '@config/env';
