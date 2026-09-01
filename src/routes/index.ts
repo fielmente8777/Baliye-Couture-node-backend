@@ -7,7 +7,8 @@ import cartRoutes from './cart';
 import orderRoutes from './order';
 import addressRoutes from './address';
 import customDesignRoutes from './design.v2';
-import catalogRoutes from './catalog';
+import garmentTypeRoutes from './garmentType';
+import productRoutes from './product';
 import adminRoutes from './admin';
 
 const router = Router();
@@ -20,7 +21,8 @@ router.use('/cart', cartRoutes);
 router.use('/orders', orderRoutes);
 router.use('/addresses', addressRoutes);
 router.use('/designs', customDesignRoutes);
-router.use('/', catalogRoutes);
+router.use('/garment-types', garmentTypeRoutes);
+router.use('/products', productRoutes);
 router.use('/admin', adminRoutes);
 
 export default router;
