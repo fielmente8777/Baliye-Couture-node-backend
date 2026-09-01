@@ -15,6 +15,7 @@ import { Role } from "@constants/role";
 import { env } from "@config/env";
 import { logger } from "@config/logger";
 import { smsChannel } from "@interfaces/sms";
+import { sendWhatsAppOtp } from "./whatsapp";
 
 const googleClient = new OAuth2Client(env.google.clientId);
 const OTP_MAX_ATTEMPTS = 5;

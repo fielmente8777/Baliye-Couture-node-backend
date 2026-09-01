@@ -13,12 +13,13 @@ export const getCart = asyncHandler(async (req: Request, res: Response) => {
 
 export const addToCart = asyncHandler(async (req: Request, res: Response) => {
   if (!req.authUser) throw ApiError.unauthorized();
-  const cart = await cartService.addItem(
-    req.authUser.id,
-    req.body.suitDesignId,
-    req.body.quantity,
-    req.body.measurementProfileId
-  );
+  const cart = await cartService.addItem(req.authUser.id, {
+    kind: req.body.kind,
+    productId: req.body.productId,
+    customDesignId: req.body.customDesignId,
+    quantity: req.body.quantity ?? 1,
+    measurementProfileId: req.body.measurementProfileId,
+  });
   ApiResponse.success(res, HttpStatus.CREATED, 'Item added to cart', cart);
 });
 
