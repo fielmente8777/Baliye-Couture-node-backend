@@ -31,6 +31,8 @@ const options: swaggerJsdoc.Options = {
     tags: [
       { name: 'Auth', description: 'Registration, OTP, Google and admin login' },
       { name: 'Profile', description: 'The signed-in user’s own profile' },
+      { name: 'Catalog', description: 'Public garment types and products' },
+      { name: 'Admin', description: 'Dashboard: catalog, products and users' },
       { name: 'Addresses', description: 'The signed-in user’s saved shipping addresses' },
       { name: 'Measurements', description: 'Admin templates and user measurements' },
       { name: 'Design', description: 'Design option catalog and saved suit designs' },

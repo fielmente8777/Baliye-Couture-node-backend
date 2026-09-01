@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { asyncHandler } from '@utils/asyncHandler';
 import { ApiResponse } from '@utils/apiResponse';
 import { HttpStatus } from '@constants/httpstatus';
