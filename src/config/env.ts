@@ -65,4 +65,9 @@ export const env = {
     pass: process.env.SMTP_PASS || "",
     from: process.env.SMTP_FROM || "no-reply@suitplatform.com",
   },
+
+  magnific: {
+    apiKey: process.env.MAGNIFIC_API_KEY || "",
+    webhookUrl: process.env.MAGNIFIC_WEBHOOK_URL || "",
+  },
 };

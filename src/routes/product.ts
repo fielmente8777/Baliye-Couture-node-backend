@@ -1,11 +1,11 @@
-import { Router } from 'express';
-import { validate } from '../middlewares/validate';
-import { productListQuerySchema, slugParamSchema } from '../types/catalog';
+import { Router } from "express";
+import { validate } from "../middlewares/validate";
+import { productListQuerySchema, slugParamSchema } from "../types/catalog";
 import {
   getProductBySlug,
   getRelatedProducts,
   listProducts,
-} from '../controllers/product';
+} from "../controllers/product";
 
 /**
  * Public product catalog. Powers the collections grid, Bestsellers,
@@ -57,7 +57,7 @@ const productRoutes = Router();
  *           application/json:
  *             schema: { $ref: '#/components/schemas/SuccessResponse' }
  */
-productRoutes.get('/', validate(productListQuerySchema), listProducts);
+productRoutes.get("/", listProducts);
 
 /**
  * @openapi
@@ -75,7 +75,7 @@ productRoutes.get('/', validate(productListQuerySchema), listProducts);
  *       200: { description: Product }
  *       404: { $ref: '#/components/responses/NotFound' }
  */
-productRoutes.get('/:slug', validate(slugParamSchema), getProductBySlug);
+productRoutes.get("/:slug", validate(slugParamSchema), getProductBySlug);
 
 /**
  * @openapi
@@ -92,7 +92,10 @@ productRoutes.get('/:slug', validate(slugParamSchema), getProductBySlug);
  *     responses:
  *       200: { description: Related products }
  */
-productRoutes.get('/:slug/related', validate(slugParamSchema), getRelatedProducts);
-
+productRoutes.get(
+  "/:slug/related",
+  validate(slugParamSchema),
+  getRelatedProducts,
+);
 
 export default productRoutes;

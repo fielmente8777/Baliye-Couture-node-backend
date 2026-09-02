@@ -1,10 +1,15 @@
-import { IProduct, ProductModel } from '@models/product';
+import { IProduct, ProductModel } from "@models/product";
 
 export function create(data: Partial<IProduct>) {
   return ProductModel.create(data);
 }
 
-export function findAll(filter: Record<string, unknown> = {}, skip = 0, limit = 12, sort: Record<string, 1 | -1> = { createdAt: -1 }) {
+export function findAll(
+  filter: Record<string, unknown> = {},
+  skip = 0,
+  limit = 12,
+  sort: Record<string, 1 | -1> = { createdAt: -1 },
+) {
   return ProductModel.find({ isDeleted: false, ...filter })
     .sort(sort)
     .skip(skip)
@@ -33,7 +38,7 @@ export function updateById(id: string, data: Partial<IProduct>) {
 export function softDelete(id: string) {
   return ProductModel.findOneAndUpdate(
     { _id: id, isDeleted: false },
-    { isDeleted: true, status: 'archived' },
-    { new: true }
+    { isDeleted: true, status: "archived" },
+    { new: true },
   ).exec();
 }

@@ -1,8 +1,8 @@
-import { Router } from 'express';
-import { authenticate } from '../middlewares/auth';
-import { authorize } from '../middlewares/role';
-import { Role } from '../constants/role';
-import { validate } from '../middlewares/validate';
+import { Router } from "express";
+import { authenticate } from "../middlewares/auth";
+import { authorize } from "../middlewares/role";
+import { Role } from "../constants/role";
+import { validate } from "../middlewares/validate";
 
 import {
   catalogIdParamSchema,
@@ -12,16 +12,20 @@ import {
   productStatusSchema,
   updateGarmentTypeSchema,
   updateProductSchema,
-} from '../types/catalog';
+} from "../types/catalog";
 
-import { getAdminProfile, getAllUsers, updateAdminProfile } from '../controllers/admin';
+import {
+  getAdminProfile,
+  getAllUsers,
+  updateAdminProfile,
+} from "../controllers/admin";
 import {
   createGarmentType,
   deleteGarmentType,
   getAllGarmentTypes,
   getGarmentTypeWithOptions,
   updateGarmentType,
-} from '../controllers/garmentType';
+} from "../controllers/garmentType";
 import {
   createProduct,
   deleteProduct,
@@ -29,7 +33,19 @@ import {
   listAllProducts,
   setProductStatus,
   updateProduct,
-} from '../controllers/product';
+} from "../controllers/product";
+import {
+  attachImage,
+  generateVariants,
+  listImageJobs,
+  refreshImageJob,
+} from "@controllers/imageGeneration";
+import {
+  generateVariantsSchema,
+  attachImageSchema,
+  studioGenerateSchema,
+} from "../types/imagejob";
+// import { attachImageSchema, generateVariantsSchema } from "@types/imagejob";
 
 const adminRoutes = Router();
 
@@ -53,8 +69,8 @@ adminRoutes.use(authenticate, authorize(Role.ADMIN));
  *     responses:
  *       200: { description: Admin profile updated }
  */
-adminRoutes.get('/me', getAdminProfile);
-adminRoutes.put('/me', updateAdminProfile);
+adminRoutes.get("/me", getAdminProfile);
+adminRoutes.put("/me", updateAdminProfile);
 
 /**
  * @openapi
@@ -72,7 +88,7 @@ adminRoutes.put('/me', updateAdminProfile);
  *     responses:
  *       200: { description: Paginated users }
  */
-adminRoutes.get('/users', getAllUsers);
+adminRoutes.get("/users", getAllUsers);
 
 /**
  * @openapi
@@ -100,8 +116,12 @@ adminRoutes.get('/users', getAllUsers);
  *       201: { description: Garment type created }
  *       409: { description: A garment type with that name already exists }
  */
-adminRoutes.get('/garment-types', getAllGarmentTypes);
-adminRoutes.post('/garment-types', validate(createGarmentTypeSchema), createGarmentType);
+adminRoutes.get("/garment-types", getAllGarmentTypes);
+adminRoutes.post(
+  "/garment-types",
+  validate(createGarmentTypeSchema),
+  createGarmentType,
+);
 
 /**
  * @openapi
@@ -137,9 +157,21 @@ adminRoutes.post('/garment-types', validate(createGarmentTypeSchema), createGarm
  *     responses:
  *       200: { description: Garment type deleted }
  */
-adminRoutes.get('/garment-types/:id', validate(catalogIdParamSchema), getGarmentTypeWithOptions);
-adminRoutes.put('/garment-types/:id', validate(updateGarmentTypeSchema), updateGarmentType);
-adminRoutes.delete('/garment-types/:id', validate(catalogIdParamSchema), deleteGarmentType);
+adminRoutes.get(
+  "/garment-types/:id",
+  validate(catalogIdParamSchema),
+  getGarmentTypeWithOptions,
+);
+adminRoutes.put(
+  "/garment-types/:id",
+  validate(updateGarmentTypeSchema),
+  updateGarmentType,
+);
+adminRoutes.delete(
+  "/garment-types/:id",
+  validate(catalogIdParamSchema),
+  deleteGarmentType,
+);
 
 /**
  * @openapi
@@ -167,8 +199,8 @@ adminRoutes.delete('/garment-types/:id', validate(catalogIdParamSchema), deleteG
  *       201: { description: Product created }
  *       409: { description: A product with that name already exists }
  */
-adminRoutes.get('/products', validate(productListQuerySchema), listAllProducts);
-adminRoutes.post('/products', validate(createProductSchema), createProduct);
+adminRoutes.get("/products", validate(productListQuerySchema), listAllProducts);
+adminRoutes.post("/products", validate(createProductSchema), createProduct);
 
 /**
  * @openapi
@@ -203,9 +235,17 @@ adminRoutes.post('/products', validate(createProductSchema), createProduct);
  *     responses:
  *       200: { description: Product archived }
  */
-adminRoutes.get('/products/:id', validate(catalogIdParamSchema), getProductById);
-adminRoutes.put('/products/:id', validate(updateProductSchema), updateProduct);
-adminRoutes.delete('/products/:id', validate(catalogIdParamSchema), deleteProduct);
+adminRoutes.get(
+  "/products/:id",
+  validate(catalogIdParamSchema),
+  getProductById,
+);
+adminRoutes.put("/products/:id", validate(updateProductSchema), updateProduct);
+adminRoutes.delete(
+  "/products/:id",
+  validate(catalogIdParamSchema),
+  deleteProduct,
+);
 
 /**
  * @openapi
@@ -229,6 +269,34 @@ adminRoutes.delete('/products/:id', validate(catalogIdParamSchema), deleteProduc
  *       200: { description: Status updated }
  *       400: { description: Product is not ready to publish }
  */
-adminRoutes.patch('/products/:id/status', validate(productStatusSchema), setProductStatus);
+adminRoutes.patch(
+  "/products/:id/status",
+  validate(productStatusSchema),
+  setProductStatus,
+);
+
+adminRoutes.post(
+  "/products/:id/generate-variants",
+  validate(generateVariantsSchema),
+  generateVariants,
+);
+adminRoutes.get(
+  "/products/:id/image-jobs",
+  validate(catalogIdParamSchema),
+  listImageJobs,
+);
+adminRoutes.post(
+  "/image-jobs/:id/refresh",
+  validate(catalogIdParamSchema),
+  refreshImageJob,
+);
+adminRoutes.post(
+  "/image-jobs/:id/attach",
+  validate(attachImageSchema),
+  attachImage,
+);
+
+// adminRoutes.post("/ai/studio", validate(studioGenerateSchema), studioGenerate);
+// adminRoutes.get("/ai/studio", listStudioJobs);
 
 export default adminRoutes;
