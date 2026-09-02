@@ -5,6 +5,34 @@ import * as cartRepository from '@repositories/cart.repository';
 import * as measurementProfileRepository from '@repositories/measurementProfile.repository';
 import * as measurementService from './measurement';
 import * as addressService from './address';
+import * as productRepository from '@repositories/product.repository';
+import { CustomDesignModel } from '@models/customdesign';
+import { ICartItem } from '@models/cart';
+import { ProductModel } from '@models/product';
+
+/**
+ * Freezes a display name, image and price onto the order line, so history is
+ * readable even after the underlying product or design changes.
+ */
+async function describeCartItem(item: ICartItem) {
+  if (item.kind === 'product' && item.productId) {
+    const product = await productRepository.findById(item.productId.toString());
+    return {
+      name: product?.name ?? 'Product',
+      image: product?.images?.[0]?.url,
+      unitPrice: item.unitPrice,
+    };
+  }
+
+  const design = item.customDesignId
+    ? await CustomDesignModel.findById(item.customDesignId).exec()
+    : null;
+
+  return {
+    name: design?.name || 'Custom Design',
+    unitPrice: item.unitPrice,
+  };
+}
 import * as userRepository from '@repositories/user.repository';
 import { ApiError } from '@utils/apiError';
 import { IMeasurementProfile } from '@models/measurementprofile';
@@ -57,8 +85,13 @@ export async function placeOrder(
       throw ApiError.badRequest('Please add your body measurements before placing an order');
     }
 
+    const snapshot = await describeCartItem(item);
+
     items.push({
-      suitDesignId: item.suitDesignId,
+      kind: item.kind,
+      productId: item.productId,
+      customDesignId: item.customDesignId,
+      itemSnapshot: snapshot,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       subtotal: item.unitPrice * item.quantity,
@@ -112,6 +145,18 @@ export async function placeOrder(
     updatedBy: userId as unknown as never,
     remarks: 'Order placed by customer',
   });
+
+  /* sort=popular reads this; without the increment it stays 0 forever. */
+  await Promise.all(
+    items
+      .filter((i) => i.kind === 'product' && i.productId)
+      .map((i) =>
+        ProductModel.updateOne(
+          { _id: i.productId },
+          { $inc: { soldCount: i.quantity } }
+        ).exec()
+      )
+  );
 
   await cartRepository.clearForUser(userId);
 

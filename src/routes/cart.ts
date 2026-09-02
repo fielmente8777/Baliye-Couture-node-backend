@@ -25,7 +25,11 @@ cartRoutes.use(authenticate, authorize(Role.USER));
  *             schema: { $ref: '#/components/schemas/SuccessResponse' }
  *       401: { $ref: '#/components/responses/Unauthorized' }
  *   post:
- *     summary: Add a suit design to my cart
+ *     summary: Add a product or a saved design to my cart
+ *     description: >
+ *       `kind: 'product'` buys a pre-designed item as-is; `kind: 'design'` adds
+ *       a saved CustomDesign from the builder or a customized product. Price is
+ *       always recomputed server-side.
  *     tags: [Cart]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:

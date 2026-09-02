@@ -2,7 +2,19 @@ import { Schema, model, Document, Types } from 'mongoose';
 import { OrderStatus } from '../constants/orderstatus';
 
 export interface IOrderItem {
-  suitDesignId: Types.ObjectId;
+  kind: 'product' | 'design';
+  productId?: Types.ObjectId;
+  customDesignId?: Types.ObjectId;
+  /**
+   * Frozen copy of what was bought. Order history must render correctly after
+   * a product is renamed, repriced or archived, so it never populates a live
+   * product to display a past order.
+   */
+  itemSnapshot: {
+    name: string;
+    image?: string;
+    unitPrice: number;
+  };
   quantity: number;
   unitPrice: number;
   subtotal: number;
@@ -41,7 +53,14 @@ export interface IOrder extends Document {
 
 const orderItemSchema = new Schema<IOrderItem>(
   {
-    suitDesignId: { type: Schema.Types.ObjectId, ref: 'SuitDesign', required: true },
+    kind: { type: String, enum: ['product', 'design'], required: true },
+    productId: { type: Schema.Types.ObjectId, ref: 'Product' },
+    customDesignId: { type: Schema.Types.ObjectId, ref: 'CustomDesign' },
+    itemSnapshot: {
+      name: { type: String, required: true },
+      image: { type: String },
+      unitPrice: { type: Number, required: true },
+    },
     quantity: { type: Number, required: true, min: 1 },
     unitPrice: { type: Number, required: true },
     subtotal: { type: Number, required: true },
