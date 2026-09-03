@@ -3,6 +3,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 
 import * as addressTypes from '../types/address';
 import * as authTypes from '../types/auth';
+import * as motifTypes from '../types/motif';
 import * as catalogTypes from '../types/catalog';
 import * as customDesignTypes from '../types/customdesign';
 import * as cartTypes from '../types/cart';
@@ -45,6 +46,9 @@ const bodySchemas: Record<string, AnyZodObject> = {
   CreateProductBody: catalogTypes.createProductSchema,
   UpdateProductBody: catalogTypes.updateProductSchema,
   ProductStatusBody: catalogTypes.productStatusSchema,
+  ExtractMotifsBody: motifTypes.extractMotifsSchema,
+  ApplyMotifsBody: motifTypes.applyMotifsSchema,
+
 
   QuotePriceBody: customDesignTypes.quotePriceSchema,
   CreateCustomDesignBody: customDesignTypes.createDesignSchema,

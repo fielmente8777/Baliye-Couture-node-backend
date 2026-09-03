@@ -296,7 +296,4 @@ adminRoutes.post(
   attachImage,
 );
 
-// adminRoutes.post("/ai/studio", validate(studioGenerateSchema), studioGenerate);
-// adminRoutes.get("/ai/studio", listStudioJobs);
-
 export default adminRoutes;

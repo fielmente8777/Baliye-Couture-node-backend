@@ -10,6 +10,7 @@ import customDesignRoutes from './design.v2';
 import garmentTypeRoutes from './garmentType';
 import productRoutes from './product';
 import adminRoutes from './admin';
+import aiRoutes from './ai';
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.use('/designs', customDesignRoutes);
 router.use('/garment-types', garmentTypeRoutes);
 router.use('/products', productRoutes);
 router.use('/admin', adminRoutes);
+router.use('/ai', aiRoutes);
 
 export default router;

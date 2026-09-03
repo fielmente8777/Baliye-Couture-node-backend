@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Types } from "mongoose";
 
 import { env } from "@config/env";
@@ -67,6 +68,8 @@ export async function requestVariants(
 
     jobs.push(
       await ImageJobModel.create({
+        stage: "variant",
+        runId: randomUUID(),
         productId: product._id,
         taskId: task.task_id,
         status: "pending",
@@ -161,6 +164,8 @@ export async function studioGenerate(
 
     jobs.push(
       await ImageJobModel.create({
+        stage: "variant",
+        runId: randomUUID(),
         taskId: task.task_id,
         status: "pending",
         selections: [],

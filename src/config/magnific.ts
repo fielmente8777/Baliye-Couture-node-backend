@@ -48,34 +48,107 @@ async function call<T>(
   return (await response.json()) as T;
 }
 
+/** Flux 2 Klein takes up to four reference images in numbered slots. */
+const MODEL_PATH = "/text-to-image/flux-2-klein";
+
 /**
- * Flux Kontext Pro: reference image + prompt in, edited image out.
- *
- * Chosen over Mystic because Mystic is text-to-image only — it cannot preserve
- * the garment's cut from the uploaded photo, which is the entire point.
+ * Magnific validates webhook_url strictly, and a half-set env var — a bare
+ * host, a placeholder, or trailing whitespace — fails the entire request with
+ * a 400 before any generation starts. Send it only when it actually parses.
  */
-export async function generateVariant(input: {
-  referenceImage: string; // base64, no data: prefix
+export const resolveWebhookUrl = (): string | undefined => {
+  const raw = env.magnific.webhookUrl?.trim();
+  if (!raw) return undefined;
+
+  try {
+    const url = new URL(raw);
+
+    /* Magnific's servers cannot reach a developer machine; sending localhost
+       means the task completes and the callback is silently lost. */
+    if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+      logger.warn("MAGNIFIC_WEBHOOK_URL points at localhost — ignoring it");
+      return undefined;
+    }
+
+    return url.toString();
+  } catch {
+    logger.warn({ raw }, "MAGNIFIC_WEBHOOK_URL is not a valid URL — ignoring it");
+    return undefined;
+  }
+};
+
+export interface GenerateInput {
+  images: string[];
   prompt: string;
+  aspectRatio?: "traditional_3_4" | "square_1_1" | "vertical_1_2";
   webhookUrl?: string;
-}): Promise<MagnificTask> {
+  outputFormat?: "png" | "jpeg";
+}
+
+/**
+ * Flux 2 Klein — the only Magnific model that accepts multiple references,
+ * which is what the two-image stages require: a target garment plus a motif
+ * sheet. Single-reference models can describe embroidery but cannot copy it.
+ */
+export async function generateWithReferences(
+  input: GenerateInput,
+): Promise<MagnificTask> {
+  if (input.images.length === 0) {
+    throw new Error("At least one reference image is required");
+  }
+
+  if (input.images.length > 4) {
+    throw new Error("Flux 2 Klein accepts at most 4 reference images");
+  }
+
+  const [first, second, third, fourth] = input.images;
+
   const res = await call<{ data: MagnificTask }>(
-    "/text-to-image/flux-kontext-pro",
+    MODEL_PATH,
     "POST",
     {
       prompt: input.prompt,
-      reference_images: [input.referenceImage],
-      aspect_ratio: "traditional_3_4",
-      ...(input.webhookUrl ? { webhook_url: input.webhookUrl } : {}),
+
+      input_image: first,
+
+      ...(second ? { input_image_2: second } : {}),
+      ...(third ? { input_image_3: third } : {}),
+      ...(fourth ? { input_image_4: fourth } : {}),
+
+      aspect_ratio: input.aspectRatio ?? "traditional_3_4",
+
+      resolution: "2k",
+
+      output_format: input.outputFormat ?? "png",
+
+      ...(input.webhookUrl
+        ? { webhook_url: input.webhookUrl }
+        : {}),
     },
   );
+
   return res.data;
 }
 
-export async function getVariantTask(taskId: string): Promise<MagnificTask> {
+export async function getTask(taskId: string): Promise<MagnificTask> {
   const res = await call<{ data: MagnificTask }>(
-    `/text-to-image/flux-kontext-pro/${taskId}`,
+    `${MODEL_PATH}/${taskId}`,
     "GET",
   );
   return res.data;
 }
+
+/** Kept so the older product-variant endpoints keep working. */
+export async function generateVariant(input: {
+  referenceImage: string;
+  prompt: string;
+  webhookUrl?: string;
+}): Promise<MagnificTask> {
+  return generateWithReferences({
+    images: [input.referenceImage],
+    prompt: input.prompt,
+    webhookUrl: input.webhookUrl,
+  });
+}
+
+export const getVariantTask = getTask;
