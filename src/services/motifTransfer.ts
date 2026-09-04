@@ -24,7 +24,9 @@ import {
 } from "@config/magnific";
 import {
   EXTRACT_MOTIFS_PROMPT,
+  applyMotifSheetsPrompt,
   applyMotifsPrompt,
+  extractFromViewsPrompt,
   extractRegionPrompt,
   type MotifRegion,
 } from "@config/prompts";
@@ -41,16 +43,53 @@ const webhook = resolveWebhookUrl;
  * runs it, then crops to a cuff and runs it again. Omitting `region` keeps the
  * old whole-garment behaviour.
  */
+export interface DonorViewInput {
+  /** Base64 without a data: prefix. */
+  image: string;
+  /** What this photograph shows: "front", "left sleeve", "hem detail". */
+  label?: string;
+}
+
+/**
+ * Stage 1 — isolate the trim from one or more photographs of a garment.
+ *
+ * Several angles of the same dress give a far more complete sheet than one:
+ * a front shot rarely shows the cuff clearly and never shows the back. The
+ * prompt states explicitly that these are one garment, so a border appearing
+ * in two photographs is extracted once rather than twice.
+ *
+ * `region` narrows a single cropped view to one border, which remains the most
+ * faithful mode when you only care about the neckline.
+ */
 export async function extractMotifs(
-  donorImage: string,
+  views: DonorViewInput[],
   adminId?: string,
   runId = randomUUID(),
   region?: MotifRegion,
 ) {
-  const prompt = region ? extractRegionPrompt(region) : EXTRACT_MOTIFS_PROMPT;
+  if (views.length === 0) {
+    throw ApiError.badRequest("Upload at least one photograph of the garment");
+  }
+
+  const labelled = views.map((view, index) => ({
+    ...view,
+    label: view.label?.trim() || `view ${index + 1} of the garment`,
+  }));
+
+  /* A single cropped region gets the tighter single-piece prompt; several
+     angles get the multi-view one that de-duplicates repeated borders. */
+  const prompt =
+    labelled.length === 1
+      ? region
+        ? extractRegionPrompt(region)
+        : EXTRACT_MOTIFS_PROMPT
+      : extractFromViewsPrompt(labelled.map((view) => ({ label: view.label })));
 
   const task = await generateWithReferences({
-    images: [donorImage],
+    images: labelled.map((view) => view.image),
+    referenceLabels: labelled.map(
+      (view) => `Photograph of the same garment: ${view.label}.`,
+    ),
     prompt,
     /*
      * Portrait canvas gives long embroidery borders more usable space. The
@@ -80,9 +119,16 @@ export async function extractMotifs(
  * The sheet is passed by URL because it is Magnific's own output; fetching and
  * re-encoding it to base64 would cost a round trip for no benefit.
  */
+export interface MotifSheetInput {
+  /** A URL from stage 1, or base64 for a sheet uploaded from disk. */
+  image: string;
+  /** Where it belongs: "neckline sheet", "cuff sheet", "hem sheet". */
+  label?: string;
+}
+
 export async function applyMotifs(
   targetImage: string,
-  motifSheetImage: string,
+  sheets: MotifSheetInput[],
   options: {
     extra?: string;
     variations?: number;
@@ -91,16 +137,42 @@ export async function applyMotifs(
     adminId?: string;
   } = {},
 ) {
+  if (sheets.length === 0) {
+    throw ApiError.badRequest("Provide at least one embroidery sheet");
+  }
+
+  const labelled = sheets.map((sheet, index) => ({
+    ...sheet,
+    label: sheet.label?.trim() || `motif sheet ${index + 1}`,
+  }));
+
   const runId = options.runId ?? randomUUID();
-  const prompt = applyMotifsPrompt(options.extra);
+
+  /* One sheet keeps the original wording; several are named individually so
+     the model places each where it belongs rather than guessing. */
+  const prompt =
+    labelled.length === 1
+      ? applyMotifsPrompt(options.extra)
+      : applyMotifSheetsPrompt(
+          labelled.map((sheet) => sheet.label),
+          options.extra,
+        );
   const variations = Math.min(Math.max(options.variations ?? 1, 1), 4);
 
   const jobs: IImageJob[] = [];
 
   for (let i = 0; i < variations; i += 1) {
     const task = await generateWithReferences({
-      /* Slot order is load-bearing: structure comes from the first image. */
-      images: [targetImage, motifSheetImage],
+      /* Slot order still matters for Flux; the labels make it explicit for
+         Nano Banana, which is the point of using it. */
+      images: [targetImage, ...labelled.map((sheet) => sheet.image)],
+      referenceLabels: [
+        "The BASE GARMENT. Keep its colour, fabric, cut, pose and silhouette exactly.",
+        ...labelled.map(
+          (sheet) =>
+            `EMBROIDERY MOTIF SOURCE — the ${sheet.label}. Use only the motifs from this image; ignore its background.`,
+        ),
+      ],
       prompt,
       webhookUrl: webhook(),
     });

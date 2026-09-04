@@ -7,8 +7,12 @@ import { ApiResponse } from "../utils/apiResponse";
 
 /** Stage 1 — queue a motif extraction from a donor garment. */
 export const extractMotifs = asyncHandler(async (req: Request, res: Response) => {
+  /* Accept either shape: views[] from the new UI, donorImage from anything
+     still on the old contract. */
+  const views = req.body.views ?? [{ image: req.body.donorImage }];
+
   const job = await motifService.extractMotifs(
-    req.body.donorImage,
+    views,
     req.authUser?.id,
     req.body.runId,
     req.body.region,
@@ -20,9 +24,11 @@ export const extractMotifs = asyncHandler(async (req: Request, res: Response) =>
 
 /** Stage 2 — apply a finished motif sheet to a target garment. */
 export const applyMotifs = asyncHandler(async (req: Request, res: Response) => {
+  const sheets = req.body.sheets ?? [{ image: req.body.motifSheetImage }];
+
   const jobs = await motifService.applyMotifs(
     req.body.targetImage,
-    req.body.motifSheetImage,
+    sheets,
     {
       extra: req.body.instruction,
       variations: req.body.variations,

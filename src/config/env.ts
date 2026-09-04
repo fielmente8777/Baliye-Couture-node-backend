@@ -69,5 +69,9 @@ export const env = {
   magnific: {
     apiKey: process.env.MAGNIFIC_API_KEY || "",
     webhookUrl: process.env.MAGNIFIC_WEBHOOK_URL || "",
+    /** 'nano-banana-pro-flash' or 'flux-2-klein'. */
+    model: (process.env.MAGNIFIC_MODEL || "nano-banana-pro-flash") as
+      | "flux-2-klein"
+      | "nano-banana-pro-flash",
   },
 };
