@@ -135,3 +135,28 @@ export const applyMotifSheetsPrompt = (sheetLabels: string[], extra?: string) =>
   ]
     .filter(Boolean)
     .join(" ");
+
+/**
+ * Stage 2 when the embroidery has already been positioned by the compositor.
+ *
+ * The reference image arrives with every motif in the right anatomical place,
+ * flat and obviously pasted on. The model's only job is to make it look
+ * stitched — which it does well — instead of deciding placement, which it does
+ * badly. This is what removes the drift.
+ */
+export const blendCompositePrompt = (extra?: string) =>
+  [
+    'The reference image is a garment with embroidery already positioned',
+    'correctly on it. The embroidery currently looks flat and pasted on.',
+    'Blend it into the fabric so it appears physically stitched: match the',
+    "garment's lighting and shadow, give the thread and beadwork real relief and",
+    'texture, and follow the drape, folds and curvature of the cloth beneath it.',
+    'Do NOT move any embroidery. Do NOT resize it. Do NOT add or remove motifs.',
+    'Do NOT change the embroidery colours. Do NOT change the garment colour,',
+    'cut, neckline shape or pose.',
+    'Keep every motif exactly where it already is.',
+    extra ?? '',
+    'Studio product photograph, plain neutral background, full garment in frame.',
+  ]
+    .filter(Boolean)
+    .join(' ');

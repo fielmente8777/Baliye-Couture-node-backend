@@ -24,6 +24,7 @@ import {
 } from "@config/magnific";
 import {
   EXTRACT_MOTIFS_PROMPT,
+  blendCompositePrompt,
   applyMotifSheetsPrompt,
   applyMotifsPrompt,
   extractFromViewsPrompt,
@@ -32,6 +33,9 @@ import {
 } from "@config/prompts";
 import { ImageJobModel, IImageJob } from "@models/imagejob";
 import { ApiError } from "@utils/apiError";
+import { getApprovedByIds } from './embroideryAssets';
+import { compositeEmbroidery } from './embroideryCompositor';
+import { Landmarks } from './garmentLandmarks';
 
 const webhook = resolveWebhookUrl;
 
@@ -237,4 +241,114 @@ export function listRuns(limit = 20) {
     .sort({ createdAt: -1 })
     .limit(limit * 4)
     .exec();
+}
+
+/**
+ * Stage 2, deterministic placement.
+ *
+ * Composites approved assets onto the blank garment using their stored
+ * landmark anchors, then hands that layout to the generator purely to blend
+ * and relight. Placement becomes arithmetic; only realism is generated.
+ *
+ * Cost is unchanged — the compositing step is free, and there is still exactly
+ * one generation call per variation.
+ */
+export async function applyAssets(
+  targetImage: string,
+  assetIds: string[],
+  options: {
+    extra?: string;
+    variations?: number;
+    runId?: string;
+    adminId?: string;
+    /** Landmarks marked by an operator, when auto-detection is unreliable. */
+    landmarks?: Landmarks;
+  } = {},
+) {
+  const assets = await getApprovedByIds(assetIds);
+
+  if (assets.length === 0) {
+    throw ApiError.badRequest(
+      'None of those embroidery assets are approved — approve them first',
+    );
+  }
+
+  const composite = await compositeEmbroidery(
+    Buffer.from(targetImage, 'base64'),
+    assets,
+    /* Seed from the asset set, so the same design scatters butis identically
+       every time while different designs differ. */
+    assetIds.join('').length,
+    options.landmarks,
+  );
+
+  const runId = options.runId ?? randomUUID();
+  const prompt = blendCompositePrompt(options.extra);
+  const variations = Math.min(Math.max(options.variations ?? 1, 1), 4);
+  const layout = composite.buffer.toString('base64');
+
+  const jobs: IImageJob[] = [];
+
+  for (let i = 0; i < variations; i += 1) {
+    const task = await generateWithReferences({
+      images: [layout],
+      referenceLabels: [
+        'A garment with embroidery already correctly positioned. Blend it in; do not move anything.',
+      ],
+      prompt,
+      aspectRatio: 'traditional_3_4',
+      outputFormat: 'png',
+      webhookUrl: webhook(),
+    });
+
+    jobs.push(
+      await ImageJobModel.create({
+        stage: 'apply',
+        runId,
+        taskId: task.task_id,
+        status: 'pending',
+        selections: [],
+        prompt,
+        createdBy: options.adminId,
+      }),
+    );
+  }
+
+  return { jobs, placedCount: composite.placedCount, landmarks: composite.landmarks };
+}
+
+/**
+ * Renders the composite without generating anything.
+ *
+ * Free, instant, and it shows exactly where every piece will land. Without it
+ * the only way to check placement is to spend a generation and wait a minute,
+ * which makes tuning an asset's offset prohibitively slow.
+ */
+export async function previewPlacement(
+  targetImage: string,
+  assetIds: string[],
+  landmarks?: Landmarks,
+) {
+  const assets = await getApprovedByIds(assetIds);
+
+  if (assets.length === 0) {
+    throw ApiError.badRequest(
+      'None of those embroidery pieces are approved — approve them first',
+    );
+  }
+
+  const composite = await compositeEmbroidery(
+    Buffer.from(targetImage, 'base64'),
+    assets,
+    assetIds.join('').length,
+    landmarks,
+  );
+
+  return {
+    /* Returned inline rather than saved: a preview is throwaway, and writing
+       a file per slider nudge would fill the uploads directory. */
+    preview: `data:image/png;base64,${composite.buffer.toString('base64')}`,
+    placedCount: composite.placedCount,
+    landmarks: composite.landmarks,
+  };
 }

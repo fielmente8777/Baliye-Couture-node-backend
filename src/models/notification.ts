@@ -11,6 +11,8 @@ export interface INotification extends Document {
   title: string;
   message: string;
   meta?: Record<string, unknown>;
+  /** Marked when the user opens it in the notification popup. */
+  isRead: boolean;
   sentAt?: Date;
   failReason?: string;
   createdAt: Date;
@@ -29,6 +31,7 @@ const notificationSchema = new Schema<INotification>(
     title: { type: String, required: true },
     message: { type: String, required: true },
     meta: { type: Schema.Types.Mixed },
+    isRead: { type: Boolean, default: false, index: true },
     sentAt: { type: Date },
     failReason: { type: String },
   },

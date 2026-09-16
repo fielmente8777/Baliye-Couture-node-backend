@@ -11,6 +11,8 @@ import {
   verifyRefreshToken,
 } from "@utils/jwt";
 import { ApiError } from "@utils/apiError";
+import { syncCustomerInBackground } from './shopifyCustomer';
+import { fetchCustomer } from '@config/shopifyAuth';
 import { Role } from "@constants/role";
 import { env } from "@config/env";
 import { logger } from "@config/logger";
@@ -85,7 +87,11 @@ export async function sendOtp(phone: string): Promise<void> {
   }
 }
 
-export async function verifyOtpAndLogin(phone: string, code: string) {
+/**
+ * Validates a code and consumes it. Shared by login and by the phone-change
+ * flow, so both enforce the same expiry and attempt limits.
+ */
+export async function assertOtpValid(phone: string, code: string) {
   const otp = await otpRepository.findLatestByPhone(phone);
   if (!otp)
     throw ApiError.badRequest("No OTP request found for this phone number");
@@ -100,6 +106,10 @@ export async function verifyOtpAndLogin(phone: string, code: string) {
   }
 
   await otpRepository.markVerified(otp._id.toString());
+}
+
+export async function verifyOtpAndLogin(phone: string, code: string) {
+  await assertOtpValid(phone, code);
 
   let user = await userRepository.findByPhone(phone);
   if (!user) {
@@ -115,6 +125,11 @@ export async function verifyOtpAndLogin(phone: string, code: string) {
   await userRepository.updateById(user._id.toString(), {
     lastLoginAt: new Date(),
   });
+
+  /* Link to Shopify in the background. Deliberately not awaited: sign-in must
+     not wait on, or fail because of, a Shopify round trip. Retries on the
+     customer's next login if it does not succeed. */
+  syncCustomerInBackground(user);
 
   return issueTokens(user._id.toString(), Role.USER);
 }
@@ -168,6 +183,11 @@ export async function microsoftLogin(accessToken: string) {
     lastLoginAt: new Date(),
   });
 
+  /* Link to Shopify in the background. Deliberately not awaited: sign-in must
+     not wait on, or fail because of, a Shopify round trip. Retries on the
+     customer's next login if it does not succeed. */
+  syncCustomerInBackground(user);
+
   return issueTokens(user._id.toString(), Role.USER);
 }
 
@@ -205,6 +225,11 @@ export async function googleLogin(idToken: string) {
   await userRepository.updateById(user._id.toString(), {
     lastLoginAt: new Date(),
   });
+
+  /* Link to Shopify in the background. Deliberately not awaited: sign-in must
+     not wait on, or fail because of, a Shopify round trip. Retries on the
+     customer's next login if it does not succeed. */
+  syncCustomerInBackground(user);
 
   return issueTokens(user._id.toString(), Role.USER);
 }
@@ -263,4 +288,62 @@ export async function refreshTokens(refreshToken: string) {
 
 export async function logout(refreshToken: string) {
   await refreshTokenRepository.revoke(refreshToken);
+}
+
+/**
+ * Sign in with a Shopify customer access token.
+ *
+ * Shopify owns authentication: the customer signed in on Shopify's hosted page
+ * with a one-time code. We verify the token by reading the customer behind it —
+ * a forged or expired token gets a 401 there — then find or create our own user
+ * and issue our own JWT.
+ *
+ * Doing it this way means Shopify is the login provider while measurements,
+ * designs, reviews and orders stay keyed to our userId. Re-keying all of that
+ * to Shopify's customer ids is the 2-4 week version of this change; this is the
+ * afternoon version, and the customer experience is identical.
+ */
+export async function shopifyLogin(accessToken: string) {
+  const profile = await fetchCustomer(accessToken);
+  if (!profile.id) throw ApiError.unauthorized('Invalid Shopify session');
+
+  const email = profile.emailAddress?.emailAddress;
+  const phone = profile.phoneNumber?.phoneNumber;
+  const name = [profile.firstName, profile.lastName].filter(Boolean).join(' ') || undefined;
+
+  let user = await userRepository.findByShopifyCustomerId(profile.id);
+
+  /**
+   * Match an existing account before creating one.
+   *
+   * Someone who signed up here by phone last month and now signs in through
+   * Shopify with the same email must land on THEIR account — with their saved
+   * measurements and designs — not a new empty one.
+   */
+  if (!user && email) user = await userRepository.findByEmail(email);
+  if (!user && phone) user = await userRepository.findByPhone(phone);
+
+  if (!user) {
+    user = await userRepository.create({
+      shopifyCustomerId: profile.id,
+      email,
+      phone,
+      name,
+      /* Shopify verified whichever identifier they signed in with. */
+      isEmailVerified: Boolean(email),
+      isPhoneVerified: Boolean(phone),
+    });
+  } else if (!user.shopifyCustomerId) {
+    user = await userRepository.updateById(user._id.toString(), {
+      shopifyCustomerId: profile.id,
+      /* Fill gaps only — never overwrite what the customer set here. */
+      ...(user.email ? {} : email ? { email, isEmailVerified: true } : {}),
+      ...(user.phone ? {} : phone ? { phone, isPhoneVerified: true } : {}),
+      ...(user.name ? {} : name ? { name } : {}),
+    });
+  }
+
+  if (!user) throw ApiError.internal('Could not create your account');
+
+  return issueTokens(user._id.toString(), Role.USER);
 }

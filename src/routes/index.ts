@@ -11,6 +11,8 @@ import garmentTypeRoutes from './garmentType';
 import productRoutes from './product';
 import adminRoutes from './admin';
 import aiRoutes from './ai';
+import shopifyRoutes from './shopify';
+import notificationRoutes from './notification';
 
 const router = Router();
 
@@ -26,5 +28,7 @@ router.use('/garment-types', garmentTypeRoutes);
 router.use('/products', productRoutes);
 router.use('/admin', adminRoutes);
 router.use('/ai', aiRoutes);
+router.use('/shopify', shopifyRoutes);
+router.use('/notifications', notificationRoutes);
 
 export default router;

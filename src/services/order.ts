@@ -14,6 +14,25 @@ import { ProductModel } from '@models/product';
  * Freezes a display name, image and price onto the order line, so history is
  * readable even after the underlying product or design changes.
  */
+/**
+ * A line needs body measurements when it is a custom design that was not
+ * ordered in a standard size. Products are cut to a size chart, and a design
+ * that recorded a sizeOptionId chose a standard size at build time.
+ */
+async function requiresMeasurements(item: ICartItem) {
+  if (item.kind === 'product') return false;
+  if (!item.customDesignId) return false;
+
+  const design = await CustomDesignModel.findById(item.customDesignId).exec();
+  if (!design) return false;
+
+  /* A saved profile on the design means made-to-measure; a size option means
+     off-the-rack. Neither means the garment type had no size step at all, in
+     which case measurements are the only way to cut it. */
+  if (design.sizeOptionId) return false;
+  return true;
+}
+
 async function describeCartItem(item: ICartItem) {
   if (item.kind === 'product' && item.productId) {
     const product = await productRepository.findById(item.productId.toString());
@@ -81,8 +100,19 @@ export async function placeOrder(
       profileCache.set(itemProfileId, profile);
     }
 
-    if (!profile || profile.values.length === 0) {
-      throw ApiError.badRequest('Please add your body measurements before placing an order');
+    /**
+     * Measurements are required only for made-to-measure lines.
+     *
+     * A garment bought in a standard size, or a pre-designed product bought
+     * as-is, is cut to a size chart — demanding a body profile for those
+     * blocked the entire checkout.
+     */
+    const needsMeasurements = await requiresMeasurements(item);
+
+    if (needsMeasurements && (!profile || profile.values.length === 0)) {
+      throw ApiError.badRequest(
+        'Please add your body measurements before placing this order',
+      );
     }
 
     const snapshot = await describeCartItem(item);
@@ -95,19 +125,25 @@ export async function placeOrder(
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       subtotal: item.unitPrice * item.quantity,
-      measurementProfileId: profile._id,
-      /* Frozen: renaming or deleting the profile must not alter this order. */
-      measurementSnapshot: {
-        profileName: profile.profileName,
-        values: profile.values.map((v) => ({ name: v.name, value: v.value, unit: v.unit })),
-      },
+      measurementProfileId: profile?._id,
+      /* Frozen: renaming or deleting the profile must not alter this order.
+         A standard-size line records the size instead of a body profile. */
+      measurementSnapshot: profile
+        ? {
+            profileName: profile.profileName,
+            values: profile.values.map((v) => ({
+              name: v.name,
+              value: v.value,
+              unit: v.unit,
+            })),
+          }
+        : { profileName: 'Standard size', values: [] },
     });
   }
 
+  /* Order-level profile is a convenience reference; a cart of standard-size
+     items legitimately has none. */
   const measurement = orderLevel ?? (await measurementService.getDefaultProfile(userId));
-  if (!measurement) {
-    throw ApiError.badRequest('Please add your body measurements before placing an order');
-  }
 
   const totalAmount = items.reduce((sum, i) => sum + i.subtotal, 0);
 

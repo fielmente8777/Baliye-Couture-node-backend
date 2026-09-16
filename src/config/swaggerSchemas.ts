@@ -4,6 +4,7 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import * as addressTypes from '../types/address';
 import * as authTypes from '../types/auth';
 import * as motifTypes from '../types/motif';
+import * as embroideryTypes from '../types/embroidery';
 import * as catalogTypes from '../types/catalog';
 import * as customDesignTypes from '../types/customdesign';
 import * as cartTypes from '../types/cart';
@@ -25,9 +26,12 @@ const bodySchemas: Record<string, AnyZodObject> = {
   AdminLoginBody: authTypes.adminLoginSchema,
   GoogleLoginBody: authTypes.googleLoginSchema,
   MicrosoftLoginBody: authTypes.microsoftLoginSchema,
+  ShopifyLoginBody: authTypes.shopifyLoginSchema,
   RefreshTokenBody: authTypes.refreshTokenSchema,
 
   UpdateProfileBody: profileTypes.updateProfileSchema,
+  RequestPhoneChangeBody: profileTypes.requestPhoneChangeSchema,
+  ConfirmPhoneChangeBody: profileTypes.confirmPhoneChangeSchema,
 
   CreateAddressBody: addressTypes.createAddressSchema,
   UpdateAddressBody: addressTypes.updateAddressSchema,
@@ -46,6 +50,12 @@ const bodySchemas: Record<string, AnyZodObject> = {
   CreateProductBody: catalogTypes.createProductSchema,
   UpdateProductBody: catalogTypes.updateProductSchema,
   ProductStatusBody: catalogTypes.productStatusSchema,
+  BuildAssetsBody: embroideryTypes.buildAssetsSchema,
+  UpdateEmbroideryAssetBody: embroideryTypes.updateAssetSchema,
+  ApproveAssetBody: embroideryTypes.approveAssetSchema,
+  DetectLandmarksBody: embroideryTypes.detectLandmarksSchema,
+  ApplyAssetsBody: embroideryTypes.applyAssetsSchema,
+
   ExtractMotifsBody: motifTypes.extractMotifsSchema,
   ApplyMotifsBody: motifTypes.applyMotifsSchema,
 

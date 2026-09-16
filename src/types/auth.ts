@@ -45,3 +45,13 @@ export const refreshTokenSchema = z.object({
     refreshToken: z.string().min(10),
   }),
 });
+
+/**
+ * The customer access token returned by Shopify's OAuth flow. The frontend
+ * exchanges the authorization code for it, then posts it here.
+ */
+export const shopifyLoginSchema = z.object({
+  body: z.object({
+    accessToken: z.string().min(10, 'Provide the Shopify customer access token'),
+  }),
+});

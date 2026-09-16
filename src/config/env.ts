@@ -53,6 +53,24 @@ export const env = {
     max: Number(process.env.RATE_LIMIT_MAX || 200),
   },
 
+  /** Where this API is reachable — used to build URLs for saved assets. */
+  publicUrl:
+    process.env.PUBLIC_URL || `http://localhost:${process.env.PORT || 5000}`,
+
+  shopify: {
+    /** e.g. baliye.myshopify.com — no protocol, no trailing slash. */
+    storeDomain: process.env.SHOPIFY_STORE_DOMAIN || "",
+    /** Custom app Admin API token. Server-side only — never expose it. */
+    adminToken: process.env.SHOPIFY_ADMIN_TOKEN || "",
+    /** Public Storefront token, for the cart work that follows. */
+    storefrontToken: process.env.SHOPIFY_STOREFRONT_TOKEN || "",
+
+    /** Numeric shop id from the Headless channel — not the myshopify domain. */
+    shopId: process.env.SHOPIFY_SHOP_ID || "",
+    /** Customer Account API client id, from the Headless channel. */
+    customerClientId: process.env.SHOPIFY_CUSTOMER_CLIENT_ID || "",
+  },
+
   upload: {
     dir: process.env.UPLOAD_DIR || "uploads",
     maxFileSizeMb: Number(process.env.MAX_FILE_SIZE_MB || 5),

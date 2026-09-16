@@ -48,3 +48,6 @@ export function softDelete(id: string) {
   ).exec();
 }
 
+export function findByShopifyCustomerId(shopifyCustomerId: string) {
+  return UserModel.findOne({ shopifyCustomerId, isDeleted: false }).exec();
+}

@@ -10,10 +10,17 @@ export function findByIdRaw(id: string) {
   return OrderModel.findOne({ _id: id, isDeleted: false }).exec();
 }
 
+/**
+ * Order items carry a frozen itemSnapshot (name, image, price), so nothing
+ * here needs populating to render an order.
+ *
+ * This previously populated 'items.suitDesignId', a path that no longer exists
+ * since items moved to productId/customDesignId. Mongoose 8 throws
+ * StrictPopulateError on an unknown path, which made every single-order
+ * lookup fail with a 500.
+ */
 export function findByIdForUser(id: string, userId: string) {
-  return OrderModel.findOne({ _id: id, userId, isDeleted: false })
-    .populate('items.suitDesignId')
-    .exec();
+  return OrderModel.findOne({ _id: id, userId, isDeleted: false }).exec();
 }
 
 export function findAllByUser(userId: string, skip = 0, limit = 10) {

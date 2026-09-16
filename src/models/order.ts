@@ -19,7 +19,8 @@ export interface IOrderItem {
   unitPrice: number;
   subtotal: number;
   /** Which profile this garment was tailored to, resolved at placement. */
-  measurementProfileId: Types.ObjectId;
+  /** Absent on standard-size lines, which are cut to a size chart. */
+  measurementProfileId?: Types.ObjectId;
   /**
    * Frozen copy of that profile's name and values. A profile the customer
    * later renames or deletes must not rewrite what the workshop was told to
@@ -67,7 +68,6 @@ const orderItemSchema = new Schema<IOrderItem>(
     measurementProfileId: {
       type: Schema.Types.ObjectId,
       ref: 'MeasurementProfile',
-      required: true,
     },
     measurementSnapshot: {
       profileName: { type: String, required: true },

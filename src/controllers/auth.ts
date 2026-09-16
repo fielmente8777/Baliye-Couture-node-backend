@@ -63,3 +63,8 @@ export const getMe = asyncHandler(async (req: Request, res: Response) => {
     profile: entity,
   });
 });
+
+export const shopifyLogin = asyncHandler(async (req: Request, res: Response) => {
+  const tokens = await authService.shopifyLogin(req.body.accessToken);
+  ApiResponse.success(res, HttpStatus.OK, 'Logged in with Shopify', tokens);
+});

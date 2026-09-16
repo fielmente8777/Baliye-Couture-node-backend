@@ -14,6 +14,14 @@ export interface IUser extends Document {
   profileImage?: string;
   googleId?: string;
   microsoftId?: string;
+  /**
+   * The matching customer in Shopify, as a gid.
+   *
+   * We own authentication; Shopify only needs a customer record so an order
+   * placed at its checkout attaches to the right person. Sparse and unique so
+   * two of our users can never point at one Shopify customer.
+   */
+  shopifyCustomerId?: string;
   isPhoneVerified: boolean;
   isEmailVerified: boolean;
   isActive: boolean;
@@ -36,6 +44,7 @@ const userSchema = new Schema<IUser>(
     country: { type: String, trim: true },
     profileImage: { type: String },
     googleId: { type: String, unique: true, sparse: true },
+    shopifyCustomerId: { type: String, unique: true, sparse: true },
     microsoftId: { type: String, unique: true, sparse: true },
     isPhoneVerified: { type: Boolean, default: false },
     isEmailVerified: { type: Boolean, default: false },

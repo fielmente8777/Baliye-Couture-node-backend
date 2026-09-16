@@ -4,6 +4,7 @@ import {
   adminLoginSchema,
   googleLoginSchema,
   microsoftLoginSchema,
+  shopifyLoginSchema,
   refreshTokenSchema,
   registerSchema,
   sendOtpSchema,
@@ -16,6 +17,7 @@ import {
   getMe,
   googleLogin,
   microsoftLogin,
+  shopifyLogin,
   logout,
   refreshToken,
   register,
@@ -247,5 +249,30 @@ authRoutes.post('/logout', validate(refreshTokenSchema), logout);
  *       401: { $ref: '#/components/responses/Unauthorized' }
  */
 authRoutes.get('/me', authenticate, getMe);
+
+/**
+ * @openapi
+ * /auth/shopify:
+ *   post:
+ *     summary: Sign in with a Shopify customer account
+ *     description: >
+ *       The customer signs in on Shopify's hosted page with a one-time code —
+ *       Shopify removed password login in API 2025-04, so the redirect is
+ *       required. The frontend exchanges the authorization code for a customer
+ *       access token and posts it here. We verify it against the Customer
+ *       Account API, link or create our user, and issue our own JWT, so
+ *       measurements, designs and orders stay keyed to our user id.
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/ShopifyLoginBody' }
+ *     responses:
+ *       200: { description: Access and refresh tokens }
+ *       401: { description: That Shopify session is not valid }
+ */
+authRoutes.post('/shopify', validate(shopifyLoginSchema), shopifyLogin);
 
 export default authRoutes;

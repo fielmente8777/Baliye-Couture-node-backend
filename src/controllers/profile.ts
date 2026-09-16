@@ -31,3 +31,19 @@ export const uploadProfileImage = asyncHandler(async (req: Request, res: Respons
   const user = await profileService.updateProfile(req.authUser.id, { profileImage: imagePath });
   ApiResponse.success(res, HttpStatus.OK, 'Profile image updated', user);
 });
+
+export const requestPhoneChange = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.authUser) throw ApiError.unauthorized();
+  const result = await profileService.requestPhoneChange(req.authUser.id, req.body.phone);
+  ApiResponse.success(res, HttpStatus.OK, "Verification code sent", result);
+});
+
+export const confirmPhoneChange = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.authUser) throw ApiError.unauthorized();
+  const user = await profileService.confirmPhoneChange(
+    req.authUser.id,
+    req.body.phone,
+    req.body.code,
+  );
+  ApiResponse.success(res, HttpStatus.OK, "Phone number updated", user);
+});
