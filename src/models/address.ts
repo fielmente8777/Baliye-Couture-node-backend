@@ -26,6 +26,14 @@ export interface IAddress extends Document {
   type: AddressType;
   isDefault: boolean;
   isDeleted: boolean;
+  /**
+   * The matching MailingAddress in Shopify, as a gid.
+   *
+   * Shopify's checkout needs the customer's address to exist on their
+   * Shopify customer record, not just in our DB. Set once the mirror
+   * succeeds; absent until then, or if the mirror has never run.
+   */
+  shopifyAddressId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,6 +52,7 @@ const addressSchema = new Schema<IAddress>(
     type: { type: String, enum: ['home', 'work', 'other'], default: 'home' },
     isDefault: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
+    shopifyAddressId: { type: String },
   },
   { timestamps: true }
 );

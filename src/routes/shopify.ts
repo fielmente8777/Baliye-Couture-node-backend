@@ -31,7 +31,7 @@ shopifyRoutes.get(
     if (!isShopifyConfigured()) {
       return ApiResponse.success(res, HttpStatus.OK, 'Shopify is not configured', {
         configured: false,
-        hint: 'Set SHOPIFY_STORE_DOMAIN and SHOPIFY_ADMIN_TOKEN, then restart',
+        hint: 'Set SHOPIFY_STORE_DOMAIN plus SHOPIFY_APP_CLIENT_ID and SHOPIFY_APP_CLIENT_SECRET (or a legacy SHOPIFY_ADMIN_TOKEN), then restart',
       });
     }
 

@@ -1,6 +1,12 @@
 import * as addressRepository from '@repositories/address.repository';
+import * as userRepository from '@repositories/user.repository';
 import { ApiError } from '@utils/apiError';
 import { IAddress } from '@models/address';
+import {
+  pushAddressCreateInBackground,
+  pushAddressUpdateInBackground,
+  pushAddressDeleteInBackground,
+} from './shopifyAddress';
 
 /** More than this is almost certainly a mistake, not a use case. */
 const MAX_ADDRESSES_PER_USER = 25;
@@ -40,6 +46,11 @@ export async function createAddress(userId: string, data: Partial<IAddress>) {
     await addressRepository.clearDefaultForUser(userId, address._id.toString());
   }
 
+  /* Mirror to Shopify so it's selectable at their checkout. Not awaited —
+     saving an address here must not fail on a Shopify outage. */
+  const user = await userRepository.findById(userId);
+  if (user) pushAddressCreateInBackground(user, address);
+
   return address;
 }
 
@@ -51,6 +62,9 @@ export async function updateAddress(id: string, userId: string, data: Partial<IA
     await addressRepository.clearDefaultForUser(userId, id);
   }
 
+  const user = await userRepository.findById(userId);
+  if (user) pushAddressUpdateInBackground(user, address);
+
   return address;
 }
 
@@ -58,13 +72,19 @@ export async function deleteAddress(id: string, userId: string) {
   const address = await addressRepository.softDeleteForUser(id, userId);
   if (!address) throw ApiError.notFound('Address not found');
 
+  const user = await userRepository.findById(userId);
+  if (user) pushAddressDeleteInBackground(user, address);
+
   /** Never leave a user with addresses but no default. */
   if (address.isDefault) {
     const remaining = await addressRepository.findAllByUser(userId);
     if (remaining[0]) {
-      await addressRepository.updateByIdForUser(remaining[0]._id.toString(), userId, {
+      const promoted = await addressRepository.updateByIdForUser(remaining[0]._id.toString(), userId, {
         isDefault: true,
       });
+      /* Shopify needs to know its default changed too, or checkout keeps
+         defaulting to the address we just deleted. */
+      if (user && promoted) pushAddressUpdateInBackground(user, promoted);
     }
   }
 

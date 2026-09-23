@@ -30,8 +30,6 @@ const bodySchemas: Record<string, AnyZodObject> = {
   RefreshTokenBody: authTypes.refreshTokenSchema,
 
   UpdateProfileBody: profileTypes.updateProfileSchema,
-  RequestPhoneChangeBody: profileTypes.requestPhoneChangeSchema,
-  ConfirmPhoneChangeBody: profileTypes.confirmPhoneChangeSchema,
 
   CreateAddressBody: addressTypes.createAddressSchema,
   UpdateAddressBody: addressTypes.updateAddressSchema,

@@ -60,8 +60,16 @@ export const env = {
   shopify: {
     /** e.g. baliye.myshopify.com — no protocol, no trailing slash. */
     storeDomain: process.env.SHOPIFY_STORE_DOMAIN || "",
-    /** Custom app Admin API token. Server-side only — never expose it. */
+    /** Custom app Admin API token. Server-side only — never expose it.
+        Only for apps created in the store admin before 2026 (static
+        shpat_ token that never expires). Leave empty when using the
+        Dev Dashboard client id/secret below. */
     adminToken: process.env.SHOPIFY_ADMIN_TOKEN || "",
+    /** Dev Dashboard app credentials (dev.shopify.com → your app → Settings).
+        Exchanged for an Admin token that lasts 24 hours and is refreshed
+        automatically — see config/shopify.ts. Preferred over adminToken. */
+    appClientId: process.env.SHOPIFY_APP_CLIENT_ID || "",
+    appClientSecret: process.env.SHOPIFY_APP_CLIENT_SECRET || "",
     /** Public Storefront token, for the cart work that follows. */
     storefrontToken: process.env.SHOPIFY_STOREFRONT_TOKEN || "",
 

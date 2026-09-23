@@ -17,6 +17,13 @@ import { errorHandler, notFoundHandler } from "./middlewares/error";
 export function createApp(): Application {
   const app = express();
 
+  /* Requests arrive through one proxy (the Next.js server / hosting load
+     balancer), which adds X-Forwarded-For. Trusting exactly one hop lets
+     express-rate-limit key on the real client IP instead of the proxy's —
+     without this every visitor shares one rate-limit bucket, and
+     express-rate-limit logs ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. */
+  app.set("trust proxy", 1);
+
   app.use(
     helmet({
       /**

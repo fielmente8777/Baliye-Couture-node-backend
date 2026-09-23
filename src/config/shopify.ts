@@ -15,12 +15,92 @@ const API_VERSION = '2026-01';
 const adminUrl = () =>
   `https://${env.shopify.storeDomain}/admin/api/${API_VERSION}/graphql.json`;
 
+const usesClientCredentials = () =>
+  Boolean(env.shopify.appClientId && env.shopify.appClientSecret);
+
 export const isShopifyConfigured = () =>
-  Boolean(env.shopify.storeDomain && env.shopify.adminToken);
+  Boolean(env.shopify.storeDomain && (usesClientCredentials() || env.shopify.adminToken));
+
+/* ---------------------------------------------------------------------------
+ * Admin access token.
+ *
+ * Since January 2026 Shopify no longer lets you create custom apps (with a
+ * permanent shpat_ token) from the store admin. Apps are created in the Dev
+ * Dashboard instead, and their Admin tokens come from the client credentials
+ * grant and EXPIRE AFTER 24 HOURS. A token copied into .env therefore works
+ * for a day, then every call fails with "Invalid API key or access token".
+ *
+ * So when SHOPIFY_APP_CLIENT_ID / SECRET are set, a fresh token is fetched
+ * here, cached in memory, and renewed five minutes before it expires.
+ * SHOPIFY_ADMIN_TOKEN is still honoured for a legacy admin-created app.
+ * ------------------------------------------------------------------------- */
+
+let cachedToken: { value: string; expiresAt: number } | null = null;
+let inFlight: Promise<string> | null = null;
+
+const RENEW_EARLY_MS = 5 * 60 * 1000;
+
+async function requestToken(): Promise<string> {
+  const response = await fetch(`https://${env.shopify.storeDomain}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: env.shopify.appClientId,
+      client_secret: env.shopify.appClientSecret,
+    }),
+  });
+
+  const text = await response.text();
+  if (!response.ok) {
+    logger.error({ status: response.status, body: text }, 'Shopify token request failed');
+    throw new Error(`Shopify token request failed (${response.status}): ${text}`);
+  }
+
+  const body = JSON.parse(text) as { access_token: string; expires_in?: number; scope?: string };
+  const lifetimeMs = (body.expires_in ?? 86399) * 1000;
+  cachedToken = { value: body.access_token, expiresAt: Date.now() + lifetimeMs };
+
+  /* The scopes are a readback of what the app version grants — logged so a
+     missing one (e.g. read_orders) is visible without guessing. */
+  logger.info({ scope: body.scope, expiresInS: body.expires_in }, 'Shopify Admin token issued');
+  return body.access_token;
+}
+
+async function getAdminToken(): Promise<string> {
+  if (!usesClientCredentials()) return env.shopify.adminToken;
+
+  if (cachedToken && Date.now() < cachedToken.expiresAt - RENEW_EARLY_MS) {
+    return cachedToken.value;
+  }
+
+  /* Several requests arriving together share one token request. */
+  inFlight ??= requestToken().finally(() => {
+    inFlight = null;
+  });
+  return inFlight;
+}
 
 interface GraphQLResponse<T> {
   data?: T;
-  errors?: { message: string }[];
+  /* Array of {message} on a normal GraphQL failure, but Shopify returns a
+     bare string here on auth failures (bad token, wrong store domain) —
+     assuming the array shape crashed this function exactly when the
+     detail mattered most: an auth problem, where response.ok is also
+     false. Typed loosely and normalized below instead. */
+  errors?: unknown;
+}
+
+/** Turns whatever shape Shopify sent `errors` in into one readable string. */
+function describeShopifyErrors(errors: unknown): string | undefined {
+  if (!errors) return undefined;
+  if (typeof errors === 'string') return errors;
+  if (Array.isArray(errors)) {
+    return errors
+      .map((e) => (typeof e === 'string' ? e : (e as { message?: string })?.message ?? JSON.stringify(e)))
+      .join('; ');
+  }
+  return JSON.stringify(errors);
 }
 
 /**
@@ -32,24 +112,37 @@ export async function adminGraphQL<T>(
   variables: Record<string, unknown> = {},
 ): Promise<T> {
   if (!isShopifyConfigured()) {
-    throw new Error('Shopify is not configured — set SHOPIFY_STORE_DOMAIN and SHOPIFY_ADMIN_TOKEN');
+    throw new Error(
+      'Shopify is not configured — set SHOPIFY_STORE_DOMAIN plus SHOPIFY_APP_CLIENT_ID/SHOPIFY_APP_CLIENT_SECRET (or SHOPIFY_ADMIN_TOKEN)',
+    );
   }
 
-  const response = await fetch(adminUrl(), {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': env.shopify.adminToken,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  const send = async () =>
+    fetch(adminUrl(), {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': await getAdminToken(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+
+  let response = await send();
+
+  /* A 401 with client credentials means the cached token was revoked or
+     expired early (e.g. the app secret was rotated) — get a new one and
+     retry once. A static token can't be renewed, so it fails straight away. */
+  if (response.status === 401 && usesClientCredentials()) {
+    cachedToken = null;
+    response = await send();
+  }
 
   const payload = (await response.json()) as GraphQLResponse<T>;
+  const detail = describeShopifyErrors(payload.errors);
 
-  if (!response.ok || payload.errors?.length) {
-    const detail = payload.errors?.map((e) => e.message).join('; ') ?? response.statusText;
-    logger.error({ status: response.status, detail }, 'Shopify Admin API error');
-    throw new Error(`Shopify: ${detail}`);
+  if (!response.ok || detail) {
+    logger.error({ status: response.status, detail: detail ?? response.statusText }, 'Shopify Admin API error');
+    throw new Error(`Shopify: ${detail ?? response.statusText}`);
   }
 
   if (!payload.data) throw new Error('Shopify returned no data');

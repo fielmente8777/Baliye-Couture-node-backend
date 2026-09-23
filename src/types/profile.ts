@@ -13,19 +13,3 @@ export const updateProfileSchema = z.object({
     phone: z.string().min(8).max(20).optional(),
   }),
 });
-
-/** E.164 with the country code — "+919876543210". */
-const e164 = z
-  .string()
-  .regex(/^\+[1-9]\d{7,14}$/, "Include the country code, e.g. +919876543210");
-
-export const requestPhoneChangeSchema = z.object({
-  body: z.object({ phone: e164 }),
-});
-
-export const confirmPhoneChangeSchema = z.object({
-  body: z.object({
-    phone: e164,
-    code: z.string().length(6, "The code is 6 digits"),
-  }),
-});

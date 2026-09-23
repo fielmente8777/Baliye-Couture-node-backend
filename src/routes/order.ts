@@ -11,6 +11,7 @@ import {
   getOrderTracking,
   getUserOrderById,
   getUserOrders,
+  getUserShopifyOrders,
 } from '../controllers/order';
 import { idParamSchema } from '../types/measurement';
 
@@ -57,6 +58,28 @@ orderRoutes.use(authenticate, authorize(Role.USER));
  */
 orderRoutes.post('/', validate(createOrderSchema), createOrder);
 orderRoutes.get('/', getUserOrders);
+
+/**
+ * @openapi
+ * /orders/shopify:
+ *   get:
+ *     summary: List my ready-to-wear orders from Shopify
+ *     description: >
+ *       Orders placed through Shopify's hosted checkout, read live from the
+ *       Shopify Admin API (matched by linked customer id or email). Newest
+ *       first. Must stay registered above /orders/{id}.
+ *     tags: [Orders]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Shopify orders
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/SuccessResponse' }
+ */
+/* Registered before /:id — otherwise "shopify" is treated as an order id
+   and rejected by idParamSchema. */
+orderRoutes.get('/shopify', getUserShopifyOrders);
 
 /**
  * @openapi

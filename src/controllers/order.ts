@@ -6,6 +6,8 @@ import { HttpStatus } from '../constants/httpstatus';
 import { ApiResponse } from '../utils/apiResponse';
 import { buildMeta, getPagination } from '../utils/pagination';
 import { OrderStatus } from '../constants/orderstatus';
+import * as userRepository from '../repositories/user.repository';
+import { getShopifyOrdersForUser } from '../services/shopifyOrders';
 
 // ---- User ----
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -24,6 +26,15 @@ export const getUserOrders = asyncHandler(async (req: Request, res: Response) =>
   const { page, limit, skip } = getPagination(req);
   const [orders, total] = await orderService.getUserOrders(req.authUser.id, skip, limit);
   ApiResponse.success(res, HttpStatus.OK, 'Orders fetched', orders, buildMeta(page, limit, total));
+});
+
+/** Ready-to-wear orders placed through Shopify's checkout, read live from Shopify. */
+export const getUserShopifyOrders = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.authUser) throw ApiError.unauthorized();
+  const user = await userRepository.findById(req.authUser.id);
+  if (!user) throw ApiError.notFound('User not found');
+  const orders = await getShopifyOrdersForUser(user);
+  ApiResponse.success(res, HttpStatus.OK, 'Shopify orders fetched', orders);
 });
 
 export const getUserOrderById = asyncHandler(async (req: Request, res: Response) => {
