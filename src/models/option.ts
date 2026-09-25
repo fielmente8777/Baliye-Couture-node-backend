@@ -27,6 +27,14 @@ export interface IOption extends Document {
    */
   priceModifier: number;
 
+  /**
+   * Options in OTHER groups this one is restricted to. Empty means it pairs
+   * with everything. Used for embroidery-by-neckline: "Keyhole embroidery"
+   * lists the neck options it suits, and is hidden when any other neck is
+   * chosen. Filled from src/script/data/embroidery-pairs.json.
+   */
+  pairsWith: Types.ObjectId[];
+
   position: number;
   isActive: boolean;
   isDeleted: boolean;
@@ -41,6 +49,7 @@ const optionSchema = new Schema<IOption>(
     image: { type: String },
     hex: { type: String, trim: true },
     priceModifier: { type: Number, default: 0 },
+    pairsWith: [{ type: Schema.Types.ObjectId, ref: 'Option' }],
     position: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },

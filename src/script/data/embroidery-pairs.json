@@ -1,0 +1,12 @@
+{
+  "_note": "Embroidery label -> neck labels it suits. Empty list = works with every neck. Neck labels: Round Neck, V-Neck, Boat Neck, Square Neck, Sweetheart Neck, Keyhole Neck, Collar Neck, High Neck, Mandarin Neck, Deep V-Neck. Run: npm run seed:embroidery-pairs",
+  "No Embroidery": [],
+  "Thread Work": [],
+  "Zari Work": [],
+  "Sequin Work": [],
+  "Mirror Work": [],
+  "Aari Work": [],
+  "Machine Embroidery": [],
+  "Hand Embroidery": [],
+  "Heavy Embroidery": []
+}

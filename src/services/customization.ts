@@ -52,6 +52,28 @@ export async function resolveConfigs(
 
   const selectedByGroup = new Map(selections.map((s) => [s.groupId, s.optionId]));
 
+  /**
+   * Pairing (e.g. embroidery by neckline). An option with `pairsWith` is only
+   * offered when the customer's choice in the paired group is one of those
+   * options. If that group has no choice yet, nothing is hidden — the stepper
+   * asks Neck before Embroidery, so in practice the choice is always there.
+   */
+  const optionGroupOf = new Map(options.map((o) => [o._id.toString(), o.groupId.toString()]));
+  const selectedOptionIds = new Set(selections.map((s) => s.optionId));
+
+  const pairsWithSelection = (option: IOption) => {
+    const pairs = option.pairsWith?.map((id) => id.toString()) ?? [];
+    if (pairs.length === 0) return true;
+
+    const pairedGroups = new Set(
+      pairs.map((id) => optionGroupOf.get(id)).filter((g): g is string => Boolean(g))
+    );
+    const groupHasChoice = [...pairedGroups].some((g) => selectedByGroup.has(g));
+    if (!groupHasChoice) return true;
+
+    return pairs.some((id) => selectedOptionIds.has(id));
+  };
+
   const resolved: ResolvedGroup[] = [];
 
   for (const config of [...configs].sort((a, b) => a.position - b.position)) {
@@ -63,7 +85,8 @@ export async function resolveConfigs(
 
     const groupOptions = options.filter((o) => {
       if (o.groupId.toString() !== config.groupId.toString()) return false;
-      return allowed.length === 0 || allowed.includes(o._id.toString());
+      if (allowed.length > 0 && !allowed.includes(o._id.toString())) return false;
+      return pairsWithSelection(o);
     });
 
     /**

@@ -9,6 +9,8 @@
     "start": "node dist/index.js",
     "seed:admin": "ts-node src/script/admin.ts",
     "seed:measurements": "ts-node src/script/measurementtemplate.ts",
+    "migrate:neck-first": "ts-node src/script/neckBeforeEmbroidery.ts",
+    "seed:embroidery-pairs": "ts-node src/script/embroideryPairs.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "seed:catalog": "ts-node src/script/catalog.ts"

@@ -25,8 +25,10 @@ const toPaise = (rupees: number) => Math.round(rupees * 100);
 const GROUPS = [
   { code: 'fabric', label: 'Fabric', inputType: 'single_select', position: 1 },
   { code: 'color', label: 'Colour', inputType: 'color_select', position: 2 },
-  { code: 'embroidery', label: 'Embroidery', inputType: 'single_select', position: 3 },
-  { code: 'neck', label: 'Neck Type', inputType: 'single_select', position: 4 },
+  /* Neck comes before Embroidery: the embroidery on offer depends on the
+     neckline, so the customer has to pick the neck first. */
+  { code: 'neck', label: 'Neck Type', inputType: 'single_select', position: 3 },
+  { code: 'embroidery', label: 'Embroidery', inputType: 'single_select', position: 4 },
   { code: 'sleeve', label: 'Sleeve Type', inputType: 'single_select', position: 5 },
   { code: 'sleeve_cuff', label: 'Sleeve Cuff', inputType: 'single_select', position: 6 },
   { code: 'lower', label: 'Lower', inputType: 'single_select', position: 7 },
@@ -163,8 +165,8 @@ const GARMENT_TYPES = [
     config: [
       { group: 'fabric', required: true },
       { group: 'color', required: true },
-      { group: 'embroidery', required: false },
       { group: 'neck', required: true },
+      { group: 'embroidery', required: false },
       { group: 'sleeve', required: true },
       /* §26: Sleeve Cuff appears only for Full Sleeve. */
       { group: 'sleeve_cuff', required: false, dependsOn: { group: 'sleeve', options: ['Full Sleeve'] } },
@@ -181,8 +183,8 @@ const GARMENT_TYPES = [
     config: [
       { group: 'fabric', required: true },
       { group: 'color', required: true },
-      { group: 'embroidery', required: false },
       { group: 'neck', required: true },
+      { group: 'embroidery', required: false },
       { group: 'sleeve', required: true },
       { group: 'sleeve_cuff', required: false, dependsOn: { group: 'sleeve', options: ['Full Sleeve'] } },
       { group: 'length', required: true },
@@ -197,8 +199,8 @@ const GARMENT_TYPES = [
     config: [
       { group: 'fabric', required: true },
       { group: 'color', required: true },
-      { group: 'embroidery', required: true },
       { group: 'neck', required: true },
+      { group: 'embroidery', required: true },
       { group: 'sleeve', required: true },
       { group: 'length', required: true, only: ['Ankle Length', 'Floor Length'] },
       { group: 'dupatta', required: false },

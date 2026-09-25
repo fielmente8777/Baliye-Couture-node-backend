@@ -132,6 +132,8 @@ export async function getDesignConfig(input: {
         image: o.image,
         hex: o.hex,
         priceModifier: o.priceModifier,
+        /* Lets the stepper hide unpaired embroidery as soon as Neck is picked. */
+        pairsWith: o.pairsWith ?? [],
       })),
     })),
   };
