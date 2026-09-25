@@ -35,6 +35,12 @@ export interface IOption extends Document {
    */
   pairsWith: Types.ObjectId[];
 
+  /**
+   * Embroidery options only: which approved asset collection (BK-EMB-…) this
+   * option renders with. Unset = the option has no embroidery to draw.
+   */
+  assetCollectionId?: string;
+
   position: number;
   isActive: boolean;
   isDeleted: boolean;
@@ -50,6 +56,7 @@ const optionSchema = new Schema<IOption>(
     hex: { type: String, trim: true },
     priceModifier: { type: Number, default: 0 },
     pairsWith: [{ type: Schema.Types.ObjectId, ref: 'Option' }],
+    assetCollectionId: { type: String, trim: true },
     position: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false },

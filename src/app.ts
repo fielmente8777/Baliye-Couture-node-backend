@@ -32,6 +32,13 @@ export function createApp(): Application {
        * this API serves JSON, not HTML — revisit if you ever serve a UI.
        */
       contentSecurityPolicy: false,
+      /**
+       * Helmet's default is "same-origin", which makes the browser REFUSE to
+       * show /uploads images on any other domain — the studio on vercel.app
+       * got a broken image for every extracted piece. Images and assets are
+       * public by design, so allow cross-origin embedding.
+       */
+      crossOriginResourcePolicy: { policy: "cross-origin" },
     }),
   );
   app.use(
@@ -59,13 +66,25 @@ export function createApp(): Application {
   app.use(express.urlencoded({ extended: true }));
   app.use(mongoSanitize());
   app.use(hpp());
-  app.use(requestLogger);
-  app.use(globalRateLimiter);
-
+  /**
+   * Uploaded and AI images. Mounted BEFORE the rate limiter: one studio page
+   * loads 10-30 thumbnails, and counting each against the 200-requests limit
+   * starts returning 429s — which also shows as broken images.
+   */
   app.use(
     "/uploads",
-    express.static(path.resolve(process.cwd(), env.upload.dir)),
+    express.static(path.resolve(process.cwd(), env.upload.dir), {
+      maxAge: "30d",
+      immutable: true,
+      setHeaders: (res) => {
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+      },
+    }),
   );
+
+  app.use(requestLogger);
+  app.use(globalRateLimiter);
 
   app.get("/health", (_req, res) => {
     res.status(200).json({

@@ -42,6 +42,20 @@ import {
  * the guard by uncommenting the line below, and move the frontend calls back
  * to /admin/ai/*.
  */
+import {
+  baseGarmentIdParamSchema,
+  clearRendersSchema,
+  createBaseGarmentSchema,
+  embroideryCollectionSchema,
+} from "../types/render";
+import {
+  clearRenders,
+  createBaseGarment,
+  deleteBaseGarment,
+  listBaseGarments,
+  setEmbroideryCollection,
+} from "../controllers/designRender";
+
 const aiRoutes = Router();
 
 // aiRoutes.use(authenticate, authorize(Role.ADMIN));
@@ -286,5 +300,20 @@ aiRoutes.post("/assets/apply", validate(applyAssetsSchema), applyAssets);
  *       200: { description: Composite as a data URL, plus the placed count }
  */
 aiRoutes.post("/assets/preview", validate(applyAssetsSchema), previewPlacement);
+
+/* Base garment library — one blank garment per garment type + neck (+ sleeve). */
+aiRoutes.post("/base-garments", validate(createBaseGarmentSchema), createBaseGarment);
+aiRoutes.get("/base-garments", listBaseGarments);
+aiRoutes.delete("/base-garments/:id", validate(baseGarmentIdParamSchema), deleteBaseGarment);
+
+/* Which approved embroidery collection an Embroidery option renders with. */
+aiRoutes.put(
+  "/embroidery-options/:optionId/collection",
+  validate(embroideryCollectionSchema),
+  setEmbroideryCollection,
+);
+
+/* Forget cached design renders after re-shooting a base or changing assets. */
+aiRoutes.post("/renders/clear", validate(clearRendersSchema), clearRenders);
 
 export default aiRoutes;

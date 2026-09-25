@@ -6,8 +6,11 @@
  * generation — they take 10-60s and would hold an Express worker open.
  */
 
+import sharp from "sharp";
+
 import { env } from "./env";
 import { logger } from "./logger";
+import { ApiError } from "../utils/apiError";
 
 const BASE_URL = "https://api.magnific.com/v1/ai";
 
@@ -24,17 +27,24 @@ async function call<T>(
   method: "GET" | "POST",
   body?: unknown,
 ): Promise<T> {
-  if (!env.magnific.apiKey)
-    throw new Error("MAGNIFIC_API_KEY is not configured");
+  if (!env.magnific.apiKey) {
+    throw new ApiError(500, "MAGNIFIC_API_KEY is not set on the server");
+  }
 
-  const response = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers: {
-      "x-magnific-api-key": env.magnific.apiKey,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers: {
+        "x-magnific-api-key": env.magnific.apiKey,
+        "Content-Type": "application/json",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (error) {
+    logger.error({ err: error, path }, "Magnific unreachable");
+    throw new ApiError(500, "Could not reach Magnific — network error from the server");
+  }
 
   if (!response.ok) {
     const detail = await response.text();
@@ -42,12 +52,78 @@ async function call<T>(
       { path, status: response.status, detail },
       "Magnific request failed",
     );
-    /* 600 chars: a Magnific validation error lists every bad field, and
-       truncating at 200 hides all but the first. */
-    throw new Error(`Magnific ${response.status}: ${detail.slice(0, 600)}`);
+    throw magnificError(response.status, detail);
   }
 
   return (await response.json()) as T;
+}
+
+/**
+ * Turns a Magnific failure into a message an operator can act on.
+ *
+ * Every failure used to surface as "check the API key and credits", which is
+ * wrong more often than not — a malformed image or an oversized request looks
+ * identical from the studio. The real reason is now passed through.
+ */
+function magnificError(status: number, detail: string) {
+  let reason = detail;
+  try {
+    const parsed = JSON.parse(detail) as { message?: string; detail?: unknown; errors?: unknown };
+    reason = [parsed.message, parsed.detail, parsed.errors]
+      .filter(Boolean)
+      .map((v) => (typeof v === "string" ? v : JSON.stringify(v)))
+      .join(" — ") || detail;
+  } catch {
+    /* not JSON — keep the raw text */
+  }
+  const short = reason.slice(0, 400);
+
+  if (status === 401 || status === 403) {
+    return new ApiError(500, `Magnific rejected the API key (${status}). Check MAGNIFIC_API_KEY on the server.`);
+  }
+  if (status === 402) {
+    return new ApiError(500, "Magnific API credits are used up — top up the API balance.");
+  }
+  if (status === 429) {
+    return new ApiError(429, "Magnific rate limit reached — wait a minute and try again.");
+  }
+  if (status === 413) {
+    return new ApiError(400, "Images too large for Magnific — use fewer or smaller photos.");
+  }
+  if (status >= 400 && status < 500) {
+    return new ApiError(400, `Magnific rejected the request (${status}): ${short}`);
+  }
+  return new ApiError(500, `Magnific is having problems (${status}) — try again shortly. ${short}`);
+}
+
+/** Longest edge sent to the model. Beyond this adds upload size, not detail. */
+const MAX_EDGE = 2048;
+
+/**
+ * Makes an uploaded photo safe to send.
+ *
+ * Browsers hand over PNG, WebP and HEIC-converted JPEG, sometimes with a
+ * "data:image/...;base64," prefix and 12-megapixel phone sizes. The request
+ * declared every image as image/jpeg regardless, which Magnific rejects for
+ * non-JPEG data, and five full-size photos can exceed its request limit.
+ * Re-encoding to a bounded JPEG fixes both. URLs pass through untouched.
+ */
+async function normaliseImage(image: string): Promise<string> {
+  if (image.startsWith("http://") || image.startsWith("https://")) return image;
+
+  const base64 = image.replace(/^data:[^;]+;base64,/, "").trim();
+
+  try {
+    const jpeg = await sharp(Buffer.from(base64, "base64"))
+      .rotate() /* honour phone EXIF orientation */
+      .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+    return jpeg.toString("base64");
+  } catch {
+    throw ApiError.badRequest("One of the photos could not be read — upload it as JPG or PNG");
+  }
 }
 
 /** Flux 2 Klein takes up to four reference images in numbered slots. */
@@ -159,7 +235,9 @@ export async function generateWithReferences(
   input: GenerateInput,
 ): Promise<MagnificTask> {
   if (input.images.length === 0)
-    throw new Error("At least one reference image is required");
+    throw ApiError.badRequest("At least one reference image is required");
+
+  input = { ...input, images: await Promise.all(input.images.map(normaliseImage)) };
 
   /**
    * Nano Banana takes an array of labelled references. Naming each image is
@@ -173,6 +251,7 @@ export async function generateWithReferences(
       reference_images: input.images.map((image, index) => ({
         image,
         text: input.referenceLabels?.[index] ?? `Reference ${index + 1}`,
+        /* Always true now: normaliseImage re-encodes uploads to JPEG. */
         mime_type: "image/jpeg",
       })),
       aspect_ratio:
@@ -184,8 +263,12 @@ export async function generateWithReferences(
     return res.data;
   }
 
-  if (input.images.length > 4)
-    throw new Error("Flux 2 Klein accepts at most 4 reference images");
+  if (input.images.length > 4) {
+    throw ApiError.badRequest(
+      `MAGNIFIC_MODEL is flux-2-klein, which takes at most 4 photos — you sent ${input.images.length}. ` +
+        "Remove a photo, or set MAGNIFIC_MODEL=nano-banana-pro-flash.",
+    );
+  }
 
   const [first, second, third, fourth] = input.images;
 

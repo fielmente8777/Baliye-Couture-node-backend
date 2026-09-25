@@ -34,7 +34,7 @@ interface Placed {
  * a composite places a dozen assets, and a dozen loopback requests per
  * generation is pointless latency.
  */
-async function fetchAsset(url: string): Promise<Buffer> {
+export async function fetchAsset(url: string): Promise<Buffer> {
   if (url.startsWith('file://')) return readFile(fileURLToPath(url));
 
   const uploads = `/uploads/`;
@@ -118,6 +118,13 @@ export interface CompositeResult {
   buffer: Buffer;
   landmarks: Landmarks;
   placedCount: number;
+  /**
+   * Where embroidery was placed: single-channel, same size as `buffer`,
+   * 255 = embroidery. The restore step keeps the AI's pixels only here.
+   */
+  embroideryMask: Buffer;
+  width: number;
+  height: number;
 }
 
 export async function compositeEmbroidery(
@@ -265,5 +272,14 @@ export async function compositeEmbroidery(
 
   const buffer = await sharp(garmentImage).composite(safe).png().toBuffer();
 
-  return { buffer, landmarks, placedCount: safe.length };
+  /* Same layers on a transparent canvas; their combined alpha is the mask. */
+  const embroideryMask = await sharp({
+    create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .composite(safe)
+    .png()
+    .toBuffer()
+    .then((png) => sharp(png).ensureAlpha().extractChannel(3).raw().toBuffer());
+
+  return { buffer, landmarks, placedCount: safe.length, embroideryMask, width: W, height: H };
 }

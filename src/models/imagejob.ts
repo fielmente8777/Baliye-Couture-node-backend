@@ -11,7 +11,7 @@ import { Schema, model, Document, Types } from "mongoose";
  *   apply    — target garment + motif sheet in, finished garment out
  *   variant  — legacy single-reference product variant
  */
-export type ImageJobStage = 'extract' | 'apply' | 'variant';
+export type ImageJobStage = 'extract' | 'apply' | 'variant' | 'render';
 
 export interface IImageJob extends Document {
   _id: Types.ObjectId;
@@ -30,6 +30,21 @@ export interface IImageJob extends Document {
   selections: { groupId: Types.ObjectId; optionId: Types.ObjectId }[];
   prompt: string;
   resultUrls: string[];
+  /**
+   * Set on blend jobs (apply / render). When the model finishes, its output is
+   * merged back onto `compositeUrl` everywhere outside `maskUrl`, and the
+   * merged image replaces resultUrls. The model's raw output is kept here.
+   */
+  compositeUrl?: string;
+  maskUrl?: string;
+  tightMaskUrl?: string;
+  rawResultUrls?: string[];
+  /** 0-1, how much the blend changed the embroidery itself. */
+  drift?: number;
+  /** Finalised: restore + drift check done. */
+  isFinalized?: boolean;
+  /** Design render this job belongs to. */
+  renderKey?: string;
   error?: string;
   createdBy?: Types.ObjectId;
   createdAt: Date;
@@ -40,7 +55,7 @@ const imageJobSchema = new Schema<IImageJob>(
     productId: { type: Schema.Types.ObjectId, ref: 'Product', index: true },
     stage: {
       type: String,
-      enum: ['extract', 'apply', 'variant'],
+      enum: ['extract', 'apply', 'variant', 'render'],
       default: 'variant',
       index: true,
     },
@@ -63,6 +78,13 @@ const imageJobSchema = new Schema<IImageJob>(
     ],
     prompt: { type: String, required: true },
     resultUrls: [{ type: String }],
+    compositeUrl: { type: String },
+    maskUrl: { type: String },
+    tightMaskUrl: { type: String },
+    rawResultUrls: [{ type: String }],
+    drift: { type: Number },
+    isFinalized: { type: Boolean, default: false },
+    renderKey: { type: String, index: true },
     error: { type: String },
     createdBy: { type: Schema.Types.ObjectId, ref: "Admin" },
   },

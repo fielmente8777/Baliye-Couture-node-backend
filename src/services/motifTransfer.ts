@@ -36,6 +36,9 @@ import { ApiError } from "@utils/apiError";
 import { getApprovedByIds } from './embroideryAssets';
 import { compositeEmbroidery } from './embroideryCompositor';
 import { Landmarks } from './garmentLandmarks';
+import { dilateMask, toPortrait } from './garmentRender';
+import { onJobSettled, saveMask } from './blendFinalize';
+import { saveGeneratedImage } from '@config/imageStore';
 
 const webhook = resolveWebhookUrl;
 
@@ -215,6 +218,13 @@ export async function refreshJob(jobId: string) {
   }
 
   await job.save();
+
+  /* Blend jobs: restore everything outside the embroidery, score drift. */
+  if (job.status !== "pending") {
+    await onJobSettled(job);
+    return (await ImageJobModel.findById(jobId).exec()) ?? job;
+  }
+
   return job;
 }
 
@@ -273,19 +283,37 @@ export async function applyAssets(
     );
   }
 
+  /* 3:4 in, 3:4 out — otherwise the model reframes and the restore step
+     cannot line its output up with the composite. */
+  const portrait = await toPortrait(Buffer.from(targetImage, 'base64'));
+
   const composite = await compositeEmbroidery(
-    Buffer.from(targetImage, 'base64'),
+    portrait.buffer,
     assets,
     /* Seed from the asset set, so the same design scatters butis identically
        every time while different designs differ. */
     assetIds.join('').length,
-    options.landmarks,
+    options.landmarks ? portrait.mapLandmarks(options.landmarks) : undefined,
   );
 
   const runId = options.runId ?? randomUUID();
   const prompt = blendCompositePrompt(options.extra);
   const variations = Math.min(Math.max(options.variations ?? 1, 1), 4);
   const layout = composite.buffer.toString('base64');
+
+  /* Saved once per run: when each variation finishes, only the pixels inside
+     the (slightly grown) embroidery mask are taken from the model. */
+  const loose = await dilateMask(
+    composite.embroideryMask,
+    composite.width,
+    composite.height,
+    Math.max(4, Math.round(composite.width * 0.012)),
+  );
+  const [compositeUrl, maskUrl, tightMaskUrl] = await Promise.all([
+    saveGeneratedImage(layout),
+    saveMask(loose, composite.width, composite.height),
+    saveMask(composite.embroideryMask, composite.width, composite.height),
+  ]);
 
   const jobs: IImageJob[] = [];
 
@@ -309,6 +337,9 @@ export async function applyAssets(
         status: 'pending',
         selections: [],
         prompt,
+        compositeUrl,
+        maskUrl,
+        tightMaskUrl,
         createdBy: options.adminId,
       }),
     );
@@ -337,11 +368,13 @@ export async function previewPlacement(
     );
   }
 
+  const portrait = await toPortrait(Buffer.from(targetImage, 'base64'));
+
   const composite = await compositeEmbroidery(
-    Buffer.from(targetImage, 'base64'),
+    portrait.buffer,
     assets,
     assetIds.join('').length,
-    landmarks,
+    landmarks ? portrait.mapLandmarks(landmarks) : undefined,
   );
 
   return {

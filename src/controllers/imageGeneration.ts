@@ -6,6 +6,7 @@ import { HttpStatus } from "../constants/httpstatus";
 import { ApiResponse } from "../utils/apiResponse";
 import { ImageJobModel } from "../models/imagejob";
 import { logger } from "../config/logger";
+import { onJobSettled } from "../services/blendFinalize";
 
 export const generateVariants = asyncHandler(
   async (req: Request, res: Response) => {
@@ -77,6 +78,12 @@ export const magnificWebhook = asyncHandler(
 
     await job.save();
     logger.info({ taskId, status }, "Magnific webhook processed");
+
+    /* Not awaited: Magnific retries slow webhooks. Restore + drift check
+       takes a few seconds and records its own errors on the job. */
+    onJobSettled(job).catch((err) =>
+      logger.error({ err, taskId }, "Post-processing after webhook failed"),
+    );
 
     ApiResponse.success(res, HttpStatus.OK, "Received");
   },

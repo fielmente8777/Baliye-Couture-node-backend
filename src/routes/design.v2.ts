@@ -17,6 +17,9 @@ import {
   getMyDesigns,
   quotePrice,
 } from '../controllers/design.v2';
+import { getRender, renderDesign } from '../controllers/designRender';
+import { renderDesignSchema, renderKeyParamSchema } from '../types/render';
+import { renderRateLimiter } from '../middlewares/ratelimit';
 
 const designRoutes = Router();
 
@@ -72,6 +75,21 @@ designRoutes.get('/config', validate(designConfigQuerySchema), getDesignConfig);
  *       400: { description: A selection is invalid, missing or not available }
  */
 designRoutes.post('/quote', validate(quotePriceSchema), quotePrice);
+
+/**
+ * @openapi
+ * /designs/render:
+ *   post:
+ *     tags: [Designs]
+ *     summary: Image of the design for the current selections
+ *     description: >
+ *       Returns previewUrl immediately (exact colour, neckline and embroidery
+ *       placement, built by code). If status is "blending", poll
+ *       GET /designs/render/{key} and swap to finalUrl when status is "ready".
+ *       status "unavailable" means no base image exists for that neck yet.
+ */
+designRoutes.post('/render', renderRateLimiter, validate(renderDesignSchema), renderDesign);
+designRoutes.get('/render/:key', validate(renderKeyParamSchema), getRender);
 
 /**
  * @openapi

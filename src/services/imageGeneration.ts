@@ -8,6 +8,7 @@ import { OptionModel } from "@models/option";
 import { OptionGroupModel } from "@models/optiongroup";
 import { ProductModel } from "@models/product";
 import { ApiError } from "@utils/apiError";
+import { onJobSettled } from "./blendFinalize";
 
 /**
  * Builds the prompt from the option catalog rather than free text.
@@ -103,6 +104,7 @@ export async function refreshJob(jobId: string) {
   }
 
   await job.save();
+  if (job.status !== "pending") await onJobSettled(job);
   return job;
 }
 
@@ -120,7 +122,12 @@ export async function attachJobImage(jobId: string, imageUrl: string) {
     throw ApiError.badRequest("That generation is not finished");
   }
 
-  const colourSelection = job.selections[0];
+  /* Selections are in stepper order, so [0] is Fabric, not Colour — find the
+     colour by its group instead. */
+  const colourGroup = await OptionGroupModel.findOne({ code: "color" }).exec();
+  const colourSelection = job.selections.find(
+    (s) => colourGroup && s.groupId.toString() === colourGroup._id.toString(),
+  );
 
   await ProductModel.updateOne(
     { _id: job.productId },

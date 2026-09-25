@@ -66,7 +66,7 @@ const point = z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1
  * by colour, and a blank suit is reused often enough that marking it once
  * is worthwhile.
  */
-const landmarksSchema = z.object({
+export const landmarksSchema = z.object({
   confidence: z.number().default(1),
   neckline: point,
   shoulderLeft: point,
