@@ -48,6 +48,8 @@ export interface IOrder extends Document {
   isDeleted: boolean;
   cancelledAt?: Date;
   cancelReason?: string;
+  /** Set on a free replacement order: the order it replaces. */
+  replacementOfOrderId?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -97,6 +99,7 @@ const orderSchema = new Schema<IOrder>(
     isDeleted: { type: Boolean, default: false },
     cancelledAt: { type: Date },
     cancelReason: { type: String },
+    replacementOfOrderId: { type: Schema.Types.ObjectId, ref: 'Order', index: true },
   },
   { timestamps: true }
 );

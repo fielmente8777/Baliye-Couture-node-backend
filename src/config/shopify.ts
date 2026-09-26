@@ -35,7 +35,7 @@ export const isShopifyConfigured = () =>
  * SHOPIFY_ADMIN_TOKEN is still honoured for a legacy admin-created app.
  * ------------------------------------------------------------------------- */
 
-let cachedToken: { value: string; expiresAt: number } | null = null;
+let cachedToken: { value: string; expiresAt: number; issuedAt: number; scope?: string } | null = null;
 let inFlight: Promise<string> | null = null;
 
 const RENEW_EARLY_MS = 5 * 60 * 1000;
@@ -59,7 +59,7 @@ async function requestToken(): Promise<string> {
 
   const body = JSON.parse(text) as { access_token: string; expires_in?: number; scope?: string };
   const lifetimeMs = (body.expires_in ?? 86399) * 1000;
-  cachedToken = { value: body.access_token, expiresAt: Date.now() + lifetimeMs };
+  cachedToken = { value: body.access_token, expiresAt: Date.now() + lifetimeMs, issuedAt: Date.now(), scope: body.scope };
 
   /* The scopes are a readback of what the app version grants — logged so a
      missing one (e.g. read_orders) is visible without guessing. */
@@ -137,8 +137,26 @@ export async function adminGraphQL<T>(
     response = await send();
   }
 
-  const payload = (await response.json()) as GraphQLResponse<T>;
-  const detail = describeShopifyErrors(payload.errors);
+  let payload = (await response.json()) as GraphQLResponse<T>;
+  let detail = describeShopifyErrors(payload.errors);
+
+  /* "Access denied" with a token issued before the latest app version was
+     released: the token still carries the OLD scopes (it lives 24 hours).
+     Fetch a new one and retry once, so a newly added scope works without a
+     restart. A token issued in the last minute is already current. */
+  if (
+    detail &&
+    /access denied|required access/i.test(detail) &&
+    usesClientCredentials() &&
+    cachedToken &&
+    Date.now() - cachedToken.issuedAt > 60_000
+  ) {
+    logger.warn({ detail, oldScope: cachedToken.scope }, 'Shopify access denied — refreshing token in case scopes changed');
+    cachedToken = null;
+    response = await send();
+    payload = (await response.json()) as GraphQLResponse<T>;
+    detail = describeShopifyErrors(payload.errors);
+  }
 
   if (!response.ok || detail) {
     logger.error({ status: response.status, detail: detail ?? response.statusText }, 'Shopify Admin API error');
@@ -148,3 +166,15 @@ export async function adminGraphQL<T>(
   if (!payload.data) throw new Error('Shopify returned no data');
   return payload.data;
 }
+/** Scopes the backend's features rely on — compared against what's granted. */
+export const REQUIRED_SCOPES = [
+  'write_customers',
+  'read_orders',
+  'write_orders',
+  'read_returns',
+  'write_returns',
+  'read_products',
+];
+
+/** How the backend authenticates, for the status endpoint. */
+export const shopifyAuthMode = () => (usesClientCredentials() ? 'client_credentials' : 'static_token');

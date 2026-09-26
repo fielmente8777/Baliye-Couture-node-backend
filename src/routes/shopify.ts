@@ -2,7 +2,7 @@ import { Router } from 'express';
 
 import { asyncHandler } from '../utils/asyncHandler';
 import { authenticate } from '../middlewares/auth';
-import { adminGraphQL, isShopifyConfigured } from '../config/shopify';
+import { REQUIRED_SCOPES, adminGraphQL, isShopifyConfigured, shopifyAuthMode } from '../config/shopify';
 import { syncCustomer } from '../services/shopifyCustomer';
 import * as userRepository from '../repositories/user.repository';
 import { HttpStatus } from '../constants/httpstatus';
@@ -38,13 +38,34 @@ shopifyRoutes.get(
     try {
       const result = await adminGraphQL<{
         shop: { name: string; myshopifyDomain: string; plan: { displayName: string } };
-      }>(`query { shop { name myshopifyDomain plan { displayName } } }`);
+        currentAppInstallation: { accessScopes: { handle: string }[] };
+      }>(`query {
+        shop { name myshopifyDomain plan { displayName } }
+        currentAppInstallation { accessScopes { handle } }
+      }`);
 
-      ApiResponse.success(res, HttpStatus.OK, 'Shopify connected', {
+      /* What the token can ACTUALLY do — the Dev Dashboard shows what was
+         requested, which only applies once the version is released and the
+         store has approved it. write_x implies read_x. */
+      const granted = result.currentAppInstallation.accessScopes.map((s) => s.handle);
+      const has = (scope: string) =>
+        granted.includes(scope) || (scope.startsWith('read_') && granted.includes(scope.replace('read_', 'write_')));
+      const missing = REQUIRED_SCOPES.filter((scope) => !has(scope));
+      const authMode = shopifyAuthMode();
+
+      ApiResponse.success(res, HttpStatus.OK, missing.length ? 'Shopify connected — scopes missing' : 'Shopify connected', {
         configured: true,
         shop: result.shop.name,
         domain: result.shop.myshopifyDomain,
         plan: result.shop.plan.displayName,
+        authMode,
+        grantedScopes: granted,
+        missingScopes: missing,
+        hint: missing.length
+          ? authMode === 'static_token'
+            ? 'The backend is using SHOPIFY_ADMIN_TOKEN, whose scopes are fixed when that token was created — Dev Dashboard changes do not affect it. Set SHOPIFY_APP_CLIENT_ID and SHOPIFY_APP_CLIENT_SECRET instead (and remove SHOPIFY_ADMIN_TOKEN), then restart.'
+            : 'Release the app version that lists these scopes, approve the updated permissions in Shopify admin → Settings → Apps, then call this again.'
+          : undefined,
       });
     } catch (error) {
       ApiResponse.success(res, HttpStatus.OK, 'Shopify connection failed', {

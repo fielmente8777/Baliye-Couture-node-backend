@@ -7,7 +7,12 @@ import { ApiResponse } from '../utils/apiResponse';
 import { buildMeta, getPagination } from '../utils/pagination';
 import { OrderStatus } from '../constants/orderstatus';
 import * as userRepository from '../repositories/user.repository';
-import { getShopifyOrdersForUser } from '../services/shopifyOrders';
+import {
+  cancelShopifyOrder,
+  getShopifyOrderDetail,
+  getShopifyOrdersForUser,
+  requestShopifyReturn,
+} from '../services/shopifyOrders';
 
 // ---- User ----
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
@@ -94,4 +99,27 @@ export const cancelOrderAdmin = asyncHandler(async (req: Request, res: Response)
 export const deleteOrderAdmin = asyncHandler(async (req: Request, res: Response) => {
   await orderService.deleteOrderAdmin(req.params.id);
   ApiResponse.success(res, HttpStatus.OK, 'Order deleted');
+});
+/* ---- Shopify (ready-to-wear) order actions ---- */
+
+async function currentUser(req: Request) {
+  if (!req.authUser) throw ApiError.unauthorized();
+  const user = await userRepository.findById(req.authUser.id);
+  if (!user) throw ApiError.notFound('User not found');
+  return user;
+}
+
+export const cancelUserShopifyOrder = asyncHandler(async (req: Request, res: Response) => {
+  const result = await cancelShopifyOrder(await currentUser(req), req.params.orderId, req.body.reason);
+  ApiResponse.success(res, HttpStatus.OK, 'Order cancelled — your refund is on its way', result);
+});
+
+export const requestUserShopifyReturn = asyncHandler(async (req: Request, res: Response) => {
+  const result = await requestShopifyReturn(await currentUser(req), req.params.orderId, req.body);
+  ApiResponse.success(res, HttpStatus.CREATED, 'Return requested', result);
+});
+
+export const getUserShopifyOrderDetail = asyncHandler(async (req: Request, res: Response) => {
+  const order = await getShopifyOrderDetail(await currentUser(req), req.params.orderId);
+  ApiResponse.success(res, HttpStatus.OK, 'Shopify order fetched', order);
 });

@@ -47,6 +47,24 @@ import {
 } from "../types/imagejob";
 // import { attachImageSchema, generateVariantsSchema } from "@types/imagejob";
 
+import {
+  cancelOrderAdmin,
+  deleteOrderAdmin,
+  getAllOrdersAdmin,
+  getOrderByIdAdmin,
+  updateOrderStatusAdmin,
+} from "../controllers/order";
+import { cancelOrderSchema, updateOrderStatusSchema } from "../types/order";
+import { idParamSchema } from "../types/measurement";
+import {
+  adminListReplacements,
+  adminUpdateReplacement,
+} from "../controllers/replacement";
+import {
+  replacementListQuerySchema,
+  updateReplacementSchema,
+} from "../types/replacement";
+
 const adminRoutes = Router();
 
 /** Every route below is admin-only; the guard is applied once here. */
@@ -295,5 +313,18 @@ adminRoutes.post(
   validate(attachImageSchema),
   attachImage,
 );
+
+/* ---- Orders ----
+   The controllers existed but were never routed, so the admin had no way to
+   move an order through Cutting → Stitching → … or cancel it. */
+adminRoutes.get("/orders", getAllOrdersAdmin);
+adminRoutes.get("/orders/:id", validate(idParamSchema), getOrderByIdAdmin);
+adminRoutes.patch("/orders/:id/status", validate(updateOrderStatusSchema), updateOrderStatusAdmin);
+adminRoutes.put("/orders/:id/cancel", validate(cancelOrderSchema), cancelOrderAdmin);
+adminRoutes.delete("/orders/:id", validate(idParamSchema), deleteOrderAdmin);
+
+/* ---- Replacement & alteration requests ---- */
+adminRoutes.get("/replacements", validate(replacementListQuerySchema), adminListReplacements);
+adminRoutes.patch("/replacements/:id", validate(updateReplacementSchema), adminUpdateReplacement);
 
 export default adminRoutes;

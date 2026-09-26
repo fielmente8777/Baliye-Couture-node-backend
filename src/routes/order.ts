@@ -3,7 +3,13 @@ import { authenticate } from '../middlewares/auth';
 import { authorize } from '../middlewares/role';
 import { Role } from '../constants/role';
 import { validate } from '../middlewares/validate';
-import { cancelOrderSchema, createOrderSchema } from '../types/order';
+import {
+  cancelOrderSchema,
+  cancelShopifyOrderSchema,
+  createOrderSchema,
+  shopifyOrderParamSchema,
+  shopifyReturnSchema,
+} from '../types/order';
 import {
   cancelUserOrder,
   createOrder,
@@ -12,8 +18,17 @@ import {
   getUserOrderById,
   getUserOrders,
   getUserShopifyOrders,
+  cancelUserShopifyOrder,
+  getUserShopifyOrderDetail,
+  requestUserShopifyReturn,
 } from '../controllers/order';
 import { idParamSchema } from '../types/measurement';
+import {
+  createReplacement,
+  getMyReplacements,
+  getOrderReplacements,
+} from '../controllers/replacement';
+import { createReplacementSchema, orderIdParamSchema } from '../types/replacement';
 
 const orderRoutes = Router();
 
@@ -81,6 +96,13 @@ orderRoutes.get('/', getUserOrders);
    and rejected by idParamSchema. */
 orderRoutes.get('/shopify', getUserShopifyOrders);
 
+/* Ready-to-wear: cancel before dispatch (full refund), or request a return /
+   replacement after delivery. :orderId is Shopify's numeric order id. */
+/* One order with return statuses and exact returnable quantities. */
+orderRoutes.get('/shopify/:orderId', validate(shopifyOrderParamSchema), getUserShopifyOrderDetail);
+orderRoutes.post('/shopify/:orderId/cancel', validate(cancelShopifyOrderSchema), cancelUserShopifyOrder);
+orderRoutes.post('/shopify/:orderId/returns', validate(shopifyReturnSchema), requestUserShopifyReturn);
+
 /**
  * @openapi
  * /orders/{id}:
@@ -103,7 +125,14 @@ orderRoutes.get('/shopify', getUserShopifyOrders);
  *       200: { description: Order removed from history }
  *       404: { $ref: '#/components/responses/NotFound' }
  */
+/* Before /:id, like /shopify. */
+orderRoutes.get('/replacements', getMyReplacements);
+
 orderRoutes.get('/:id', validate(idParamSchema), getUserOrderById);
+
+/* Replacement / alteration requests for a delivered order. */
+orderRoutes.post('/:id/replacements', validate(createReplacementSchema), createReplacement);
+orderRoutes.get('/:id/replacements', validate(orderIdParamSchema), getOrderReplacements);
 orderRoutes.delete('/:id', validate(idParamSchema), deleteUserOrder);
 
 /**

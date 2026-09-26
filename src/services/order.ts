@@ -55,7 +55,15 @@ async function describeCartItem(item: ICartItem) {
 import * as userRepository from '@repositories/user.repository';
 import { ApiError } from '@utils/apiError';
 import { IMeasurementProfile } from '@models/measurementprofile';
-import { OrderStatus, ORDER_STATUS_FLOW, TERMINAL_ORDER_STATUSES } from '@constants/orderstatus';
+import {
+  CUSTOMER_CANCELLABLE_STATUSES,
+  OrderStatus,
+  ORDER_STATUS_FLOW,
+  REPLACEMENT_WINDOW_DAYS,
+  TERMINAL_ORDER_STATUSES,
+} from '@constants/orderstatus';
+import { OrderTrackingModel } from '@models/tracking';
+import { IOrder } from '@models/order';
 import {
   emitOrderCancelled,
   emitOrderPlaced,
@@ -216,18 +224,59 @@ export function getUserOrders(userId: string, skip: number, limit: number) {
   ]);
 }
 
+/** When the order was delivered, from its tracking history. */
+export async function deliveredAt(order: IOrder): Promise<Date | null> {
+  if (order.status !== OrderStatus.DELIVERED) return null;
+  const entry = await OrderTrackingModel.findOne({
+    orderId: order._id,
+    status: OrderStatus.DELIVERED,
+  })
+    .sort({ createdAt: -1 })
+    .exec();
+  return entry?.createdAt ?? order.updatedAt;
+}
+
+/** Last moment a replacement can be requested, or null if not delivered. */
+export async function replacementDeadline(order: IOrder): Promise<Date | null> {
+  const delivered = await deliveredAt(order);
+  if (!delivered) return null;
+  return new Date(delivered.getTime() + REPLACEMENT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * Order detail plus what the customer may do with it, so the frontend shows
+ * the Cancel / Request replacement buttons only when they will work.
+ */
 export async function getUserOrderById(id: string, userId: string) {
   const order = await orderRepository.findByIdForUser(id, userId);
   if (!order) throw ApiError.notFound('Order not found');
-  return order;
+
+  const deadline = await replacementDeadline(order);
+
+  return {
+    ...order.toObject(),
+    canCancel: CUSTOMER_CANCELLABLE_STATUSES.includes(order.status),
+    canRequestReplacement: Boolean(deadline && deadline.getTime() > Date.now()),
+    replacementWindowEndsAt: deadline,
+  };
 }
 
 export async function cancelUserOrder(id: string, userId: string, reason?: string) {
   const order = await orderRepository.findByIdForUser(id, userId);
   if (!order) throw ApiError.notFound('Order not found');
 
-  if (TERMINAL_ORDER_STATUSES.includes(order.status)) {
-    throw ApiError.badRequest(`Order cannot be cancelled from status "${order.status}"`);
+  if (order.status === OrderStatus.CANCELLED) {
+    throw ApiError.badRequest('This order is already cancelled');
+  }
+
+  /* Previously any non-terminal status was allowed — including Cutting and
+     Shipped, where the fabric is already cut or the parcel is on its way. */
+  if (!CUSTOMER_CANCELLABLE_STATUSES.includes(order.status)) {
+    throw ApiError.badRequest(
+      order.status === OrderStatus.DELIVERED
+        ? 'This order has been delivered — request a replacement or alteration instead'
+        : `Your order is already in "${order.status}" and can no longer be cancelled online. Please contact us.`,
+    );
   }
 
   const updated = await orderRepository.cancel(id, reason);

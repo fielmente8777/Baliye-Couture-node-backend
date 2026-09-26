@@ -13,6 +13,7 @@ import adminRoutes from './admin';
 import aiRoutes from './ai';
 import shopifyRoutes from './shopify';
 import notificationRoutes from './notification';
+import wishlistRoutes from './wishlist';
 
 const router = Router();
 
@@ -30,5 +31,6 @@ router.use('/admin', adminRoutes);
 router.use('/ai', aiRoutes);
 router.use('/shopify', shopifyRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/wishlist', wishlistRoutes);
 
 export default router;

@@ -29,6 +29,20 @@ export const ORDER_STATUS_FLOW: Record<OrderStatus, OrderStatus[]> = {
   [OrderStatus.CANCELLED]: [],
 };
 
+/**
+ * Where a CUSTOMER may still cancel. Once cutting starts the fabric is cut to
+ * their body and cannot be resold, and a shipped parcel cannot be recalled —
+ * from there, only an admin can cancel (after talking to the customer).
+ */
+export const CUSTOMER_CANCELLABLE_STATUSES: OrderStatus[] = [
+  OrderStatus.PENDING,
+  OrderStatus.CONFIRMED,
+  OrderStatus.MEASUREMENT_VERIFIED,
+];
+
+/** Days after delivery during which a replacement or alteration can be requested. */
+export const REPLACEMENT_WINDOW_DAYS = 7;
+
 export const TERMINAL_ORDER_STATUSES: OrderStatus[] = [
   OrderStatus.DELIVERED,
   OrderStatus.CANCELLED,
