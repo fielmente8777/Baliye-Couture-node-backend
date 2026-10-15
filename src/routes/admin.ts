@@ -43,7 +43,6 @@ import {
 import {
   generateVariantsSchema,
   attachImageSchema,
-  studioGenerateSchema,
 } from "../types/imagejob";
 // import { attachImageSchema, generateVariantsSchema } from "@types/imagejob";
 

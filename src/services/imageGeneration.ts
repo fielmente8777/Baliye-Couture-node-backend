@@ -1,8 +1,9 @@
 import { randomUUID } from "crypto";
 import { Types } from "mongoose";
 
-import { env } from "@config/env";
-import { generateVariant, getVariantTask } from "@config/magnific";
+import { generateVariant, getVariantTask } from "@config/imageAI";
+/* Finishes jobs the moment OpenAI returns (replaces Magnific's webhook). */
+import "./imageTasks";
 import { ImageJobModel } from "@models/imagejob";
 import { OptionModel } from "@models/option";
 import { OptionGroupModel } from "@models/optiongroup";
@@ -64,7 +65,6 @@ export async function requestVariants(
     const task = await generateVariant({
       referenceImage,
       prompt,
-      webhookUrl: env.magnific.webhookUrl || undefined,
     });
 
     jobs.push(
@@ -98,9 +98,10 @@ export async function refreshJob(jobId: string) {
   if (task.status === "COMPLETED") {
     job.status = "completed";
     job.resultUrls = task.generated;
+    job.usage = task.usage;
   } else if (task.status === "FAILED") {
     job.status = "failed";
-    job.error = "Generation failed";
+    job.error = task.error ?? "Image generation failed";
   }
 
   await job.save();
@@ -146,49 +147,4 @@ export async function attachJobImage(jobId: string, imageUrl: string) {
 
   return job;
 }
-
-export async function studioGenerate(
-  referenceImage: string,
-  prompt: string,
-  variations: number,
-  adminId?: string,
-) {
-  const fullPrompt = [
-    "Product photograph of the same garment shown in the reference image.",
-    "Keep the exact silhouette, cut, drape and pose unchanged.",
-    prompt,
-    "Studio lighting, plain neutral background, full garment in frame.",
-  ].join(" ");
-
-  const jobs = [];
-
-  for (let i = 0; i < variations; i += 1) {
-    const task = await generateVariant({
-      referenceImage,
-      prompt: fullPrompt,
-      webhookUrl: env.magnific.webhookUrl || undefined,
-    });
-
-    jobs.push(
-      await ImageJobModel.create({
-        stage: "variant",
-        runId: randomUUID(),
-        taskId: task.task_id,
-        status: "pending",
-        selections: [],
-        prompt: fullPrompt,
-        createdBy: adminId,
-      }),
-    );
-  }
-
-  return jobs;
-}
-
-/** Studio history — jobs with no product attached. */
-export function getStudioJobs(limit = 30) {
-  return ImageJobModel.find({ productId: { $exists: false } })
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .exec();
-}
+

@@ -1,9 +1,5 @@
 import { OrderStatus } from '@constants/orderstatus';
-import { IOrder, OrderModel } from '@models/order';
-
-export function create(data: Partial<IOrder>) {
-  return OrderModel.create(data);
-}
+import { OrderModel } from '@models/order';
 
 /** Raw lookup (admin) — ignores ownership but still hides soft-deleted orders. */
 export function findByIdRaw(id: string) {

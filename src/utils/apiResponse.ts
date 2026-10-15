@@ -7,7 +7,7 @@ interface Meta {
   totalPages?: number;
 }
 
-export function success(
+function success(
   res: Response,
   statusCode: number,
   message: string,
@@ -22,7 +22,7 @@ export function success(
   });
 }
 
-export function error(res: Response, statusCode: number, message: string, errors: unknown[] = []) {
+function error(res: Response, statusCode: number, message: string, errors: unknown[] = []) {
   return res.status(statusCode).json({
     success: false,
     message,

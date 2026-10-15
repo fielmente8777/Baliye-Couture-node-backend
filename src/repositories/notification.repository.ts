@@ -21,7 +21,3 @@ export function markFailed(id: string, reason: string) {
   ).exec();
 }
 
-export function findByUser(userId: string, skip = 0, limit = 10) {
-  return NotificationModel.find({ userId }).sort({ createdAt: -1 }).skip(skip).limit(limit).exec();
-}
-

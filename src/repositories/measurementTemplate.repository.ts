@@ -14,10 +14,6 @@ export function findAllActive() {
     .exec();
 }
 
-export function findById(id: string) {
-  return MeasurementTemplateModel.findById(id).exec();
-}
-
 export function updateById(id: string, data: Partial<IMeasurementTemplate>) {
   return MeasurementTemplateModel.findByIdAndUpdate(id, data, { new: true }).exec();
 }

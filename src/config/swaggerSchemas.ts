@@ -65,7 +65,6 @@ const bodySchemas: Record<string, AnyZodObject> = {
   AddToCartBody: cartTypes.addToCartSchema,
   UpdateCartItemBody: cartTypes.updateCartItemSchema,
 
-  CreateOrderBody: orderTypes.createOrderSchema,
   UpdateOrderStatusBody: orderTypes.updateOrderStatusSchema,
   CancelOrderBody: orderTypes.cancelOrderSchema,
 };

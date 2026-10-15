@@ -7,7 +7,7 @@ import { NotificationChannelHandler, NotificationPayload } from './channel';
  * credentials are provisioned — the interface is already channel-agnostic
  * so the rest of the notification system doesn't need to change.
  */
-export async function send(payload: NotificationPayload): Promise<void> {
+async function send(payload: NotificationPayload): Promise<void> {
   if (!env.smtp.host) {
     logger.warn('SMTP not configured — skipping email send (dev mode)');
     return;

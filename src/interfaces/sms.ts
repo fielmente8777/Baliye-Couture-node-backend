@@ -8,7 +8,7 @@ const client =
     ? twilio(env.twilio.accountSid, env.twilio.authToken)
     : null;
 
-export async function send(payload: NotificationPayload): Promise<void> {
+async function send(payload: NotificationPayload): Promise<void> {
   if (!client) {
     logger.warn('Twilio not configured — skipping SMS send (dev mode)');
     return;

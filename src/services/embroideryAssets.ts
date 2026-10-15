@@ -11,6 +11,7 @@ import { ImageJobModel } from '@models/imagejob';
 import { ApiError } from '@utils/apiError';
 import { logger } from '@config/logger';
 import { splitSheet } from './sheetSplitter';
+import { fetchAsset } from './embroideryCompositor';
 import sharp from 'sharp';
 
 /**
@@ -67,9 +68,14 @@ export async function buildAssetsFromJob(
   }
 
   const sheetUrl = job.resultUrls[0];
-  const response = await fetch(sheetUrl);
-  if (!response.ok) throw ApiError.badRequest('Could not load the extracted sheet');
-  const sheet = Buffer.from(await response.arrayBuffer());
+  /* Read from our own storage (disk first) — fetching our own public URL
+     fails behind ngrok or a private network. */
+  let sheet: Buffer;
+  try {
+    sheet = await fetchAsset(sheetUrl);
+  } catch {
+    throw ApiError.badRequest('Could not load the extracted sheet');
+  }
 
   const pieces = await splitSheet(sheet);
   if (pieces.length === 0) {

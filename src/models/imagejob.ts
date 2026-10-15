@@ -45,6 +45,18 @@ export interface IImageJob extends Document {
   isFinalized?: boolean;
   /** Design render this job belongs to. */
   renderKey?: string;
+  /** OpenAI tokens and estimated cost (see config/imageUsage.ts). */
+  usage?: {
+    model: string;
+    size: string;
+    quality: string;
+    inputTokens: number;
+    inputImageTokens: number;
+    inputTextTokens: number;
+    outputTokens: number;
+    costUsd: number | null;
+    calls: number;
+  };
   error?: string;
   createdBy?: Types.ObjectId;
   createdAt: Date;
@@ -85,6 +97,7 @@ const imageJobSchema = new Schema<IImageJob>(
     drift: { type: Number },
     isFinalized: { type: Boolean, default: false },
     renderKey: { type: String, index: true },
+    usage: { type: Schema.Types.Mixed },
     error: { type: String },
     createdBy: { type: Schema.Types.ObjectId, ref: "Admin" },
   },

@@ -92,12 +92,27 @@ export const env = {
     from: process.env.SMTP_FROM || "no-reply@suitplatform.com",
   },
 
-  magnific: {
-    apiKey: process.env.MAGNIFIC_API_KEY || "",
-    webhookUrl: process.env.MAGNIFIC_WEBHOOK_URL || "",
-    /** 'nano-banana-pro-flash' or 'flux-2-klein'. */
-    model: (process.env.MAGNIFIC_MODEL || "nano-banana-pro-flash") as
-      | "flux-2-klein"
-      | "nano-banana-pro-flash",
+  /** OpenAI Images API — embroidery extraction, blending, product variants. */
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || "",
+    /** Only for keys that belong to several organisations. */
+    organization: process.env.OPENAI_ORG_ID || "",
+    baseUrl: (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/+$/, ""),
+    /**
+     * gpt-image-2.5-sunburst — most faithful edits (default)
+     * gpt-image-2.5-flare    — faster, same price
+     * gpt-image-2            — previous generation
+     */
+    imageModel: process.env.OPENAI_IMAGE_MODEL || "gpt-image-2.5-sunburst",
+    /** Studio work: low | medium | high | xhigh | max | auto. */
+    quality: process.env.OPENAI_IMAGE_QUALITY || "high",
+    /** Customer design previews — generated per new combination, so cheaper. */
+    renderQuality: process.env.OPENAI_RENDER_QUALITY || "medium",
+    /** "auto" (default) or "low" — less strict filtering. */
+    moderation: process.env.OPENAI_IMAGE_MODERATION || "auto",
+    /** High-quality edits can take a minute or two. */
+    timeoutMs: Number(process.env.OPENAI_IMAGE_TIMEOUT_MS || 300000),
+    /** Generations running at once. Raise on higher OpenAI tiers. */
+    concurrency: Number(process.env.OPENAI_IMAGE_CONCURRENCY || 2),
   },
 };

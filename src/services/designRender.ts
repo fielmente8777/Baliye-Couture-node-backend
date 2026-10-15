@@ -2,7 +2,8 @@ import { createHash } from 'crypto';
 import { Types } from 'mongoose';
 import sharp from 'sharp';
 
-import { generateWithReferences, resolveWebhookUrl } from '@config/magnific';
+import { env } from '@config/env';
+import { generateWithReferences } from '@config/imageAI';
 import { saveGeneratedImage } from '@config/imageStore';
 import { logger } from '@config/logger';
 import { blendCompositePrompt } from '@config/prompts';
@@ -336,9 +337,10 @@ export async function renderDesign(input: RenderInput): Promise<RenderResponse> 
         'A garment with embroidery already correctly positioned. Blend it in; do not move anything.',
       ],
       prompt,
-      aspectRatio: 'traditional_3_4',
-      outputFormat: 'png',
-      webhookUrl: resolveWebhookUrl(),
+      preserveFrame: true,
+      mask: { data: loose, width: composite.width, height: composite.height },
+      quality: env.openai.renderQuality,
+      label: 'render (customer preview)',
     });
 
     const job = await ImageJobModel.create({

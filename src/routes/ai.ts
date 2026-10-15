@@ -37,7 +37,7 @@ import {
  *
  * TEMPORARILY UNGUARDED so the feature can be demoed without an admin login.
  *
- * Every call here spends Magnific credits, so this must not reach production
+ * Every call here spends OpenAI credits, so this must not reach production
  * open — anyone who finds the URL could drain the balance in a loop. Restore
  * the guard by uncommenting the line below, and move the frontend calls back
  * to /admin/ai/*.
@@ -56,7 +56,51 @@ import {
   setEmbroideryCollection,
 } from "../controllers/designRender";
 
+import { checkImageProvider } from "../config/imageAI";
+import { getImageUsageReport } from "../services/imageUsageReport";
+import { asyncHandler } from "../utils/asyncHandler";
+import { ApiResponse } from "../utils/apiResponse";
+import { HttpStatus } from "../constants/httpstatus";
+
 const aiRoutes = Router();
+
+/**
+ * @openapi
+ * /ai/status:
+ *   get:
+ *     summary: Check the OpenAI image setup
+ *     description: >
+ *       Confirms OPENAI_API_KEY works and the configured model is available,
+ *       without generating (or paying for) an image.
+ *     tags: [AI Studio]
+ *     security: []
+ */
+aiRoutes.get(
+  "/status",
+  asyncHandler(async (_req, res) => {
+    const status = await checkImageProvider();
+    ApiResponse.success(res, HttpStatus.OK, "Image provider status", status);
+  }),
+);
+
+/**
+ * @openapi
+ * /ai/usage:
+ *   get:
+ *     summary: OpenAI image tokens and estimated cost
+ *     description: >
+ *       Totals by stage (extract, apply, render, variant) and by day, plus
+ *       everything since the backend last started. `?days=30` by default.
+ *     tags: [AI Studio]
+ *     security: []
+ */
+aiRoutes.get(
+  "/usage",
+  asyncHandler(async (req, res) => {
+    const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
+    ApiResponse.success(res, HttpStatus.OK, "Image usage", await getImageUsageReport(days));
+  }),
+);
 
 // aiRoutes.use(authenticate, authorize(Role.ADMIN));
 
@@ -107,7 +151,7 @@ aiRoutes.post("/apply-motifs", validate(applyMotifsSchema), applyMotifs);
  * /ai/runs/{runId}:
  *   get:
  *     summary: Poll every job in a run
- *     description: Refreshes any pending Magnific tasks before returning.
+ *     description: Refreshes any pending generations before returning.
  *     tags: [AI Studio]
  *     security: []
  *     parameters:

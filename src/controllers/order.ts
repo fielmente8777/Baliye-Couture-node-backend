@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/apiError';
 import * as orderService from '../services/order';
+import * as designCheckout from '../services/designCheckout';
 import { HttpStatus } from '../constants/httpstatus';
 import { ApiResponse } from '../utils/apiResponse';
 import { buildMeta, getPagination } from '../utils/pagination';
@@ -15,15 +16,11 @@ import {
 } from '../services/shopifyOrders';
 
 // ---- User ----
-export const createOrder = asyncHandler(async (req: Request, res: Response) => {
+/** Custom designs are paid for on Shopify — returns the checkout URL. */
+export const startDesignCheckout = asyncHandler(async (req: Request, res: Response) => {
   if (!req.authUser) throw ApiError.unauthorized();
-  const order = await orderService.placeOrder(
-    req.authUser.id,
-    req.body.shippingAddress,
-    req.body.measurementProfileId,
-    req.body.shippingAddressId
-  );
-  ApiResponse.success(res, HttpStatus.CREATED, 'Order placed successfully', order);
+  const result = await designCheckout.startDesignCheckout(req.authUser.id, req.body.shippingAddressId);
+  ApiResponse.success(res, HttpStatus.OK, 'Checkout ready', result);
 });
 
 export const getUserOrders = asyncHandler(async (req: Request, res: Response) => {

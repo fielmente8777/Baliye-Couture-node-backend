@@ -6,13 +6,12 @@ import { validate } from '../middlewares/validate';
 import {
   cancelOrderSchema,
   cancelShopifyOrderSchema,
-  createOrderSchema,
+  designCheckoutSchema,
   shopifyOrderParamSchema,
   shopifyReturnSchema,
 } from '../types/order';
 import {
   cancelUserOrder,
-  createOrder,
   deleteUserOrder,
   getOrderTracking,
   getUserOrderById,
@@ -21,6 +20,7 @@ import {
   cancelUserShopifyOrder,
   getUserShopifyOrderDetail,
   requestUserShopifyReturn,
+  startDesignCheckout,
 } from '../controllers/order';
 import { idParamSchema } from '../types/measurement';
 import {
@@ -37,26 +37,6 @@ orderRoutes.use(authenticate, authorize(Role.USER));
 /**
  * @openapi
  * /orders:
- *   post:
- *     summary: Place an order from my cart
- *     description: >
- *       Fails if the cart is empty or the user has no saved measurements.
- *       Clears the cart on success and emits an ORDER_PLACED notification.
- *     tags: [Orders]
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/CreateOrderBody' }
- *     responses:
- *       201:
- *         description: Order placed
- *         content:
- *           application/json:
- *             schema: { $ref: '#/components/schemas/SuccessResponse' }
- *       400: { description: Cart is empty, or measurements are missing }
- *       401: { $ref: '#/components/responses/Unauthorized' }
  *   get:
  *     summary: List my orders
  *     tags: [Orders]
@@ -71,7 +51,6 @@ orderRoutes.use(authenticate, authorize(Role.USER));
  *           application/json:
  *             schema: { $ref: '#/components/schemas/SuccessResponse' }
  */
-orderRoutes.post('/', validate(createOrderSchema), createOrder);
 orderRoutes.get('/', getUserOrders);
 
 /**
@@ -95,6 +74,20 @@ orderRoutes.get('/', getUserOrders);
 /* Registered before /:id — otherwise "shopify" is treated as an order id
    and rejected by idParamSchema. */
 orderRoutes.get('/shopify', getUserShopifyOrders);
+
+/**
+ * @openapi
+ * /orders/shopify/checkout:
+ *   post:
+ *     summary: Pay for the cart's custom designs on Shopify
+ *     description: >
+ *       Creates (or refreshes) a Shopify draft order for the designs in the
+ *       cart, priced by this server, and returns its checkout URL. Paying
+ *       there creates the Shopify order; the designs then leave the cart.
+ *     tags: [Orders]
+ *     security: [{ bearerAuth: [] }]
+ */
+orderRoutes.post('/shopify/checkout', validate(designCheckoutSchema), startDesignCheckout);
 
 /* Ready-to-wear: cancel before dispatch (full refund), or request a return /
    replacement after delivery. :orderId is Shopify's numeric order id. */

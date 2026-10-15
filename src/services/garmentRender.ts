@@ -21,7 +21,7 @@ export interface RawImage {
 }
 
 /** Every image sent to the model is 3:4 — the model always answers in 3:4. */
-export const RENDER_ASPECT = 3 / 4;
+const RENDER_ASPECT = 3 / 4;
 
 async function toRaw(image: Buffer, width?: number, height?: number): Promise<RawImage> {
   let pipeline = sharp(image).removeAlpha();

@@ -1,14 +1,7 @@
-import { randomUUID } from 'crypto';
 import * as orderRepository from '@repositories/order.repository';
 import * as orderTrackingRepository from '@repositories/orderTracking.repository';
-import * as cartRepository from '@repositories/cart.repository';
-import * as measurementProfileRepository from '@repositories/measurementProfile.repository';
-import * as measurementService from './measurement';
-import * as addressService from './address';
-import * as productRepository from '@repositories/product.repository';
 import { CustomDesignModel } from '@models/customdesign';
 import { ICartItem } from '@models/cart';
-import { ProductModel } from '@models/product';
 
 /**
  * Freezes a display name, image and price onto the order line, so history is
@@ -19,7 +12,7 @@ import { ProductModel } from '@models/product';
  * ordered in a standard size. Products are cut to a size chart, and a design
  * that recorded a sizeOptionId chose a standard size at build time.
  */
-async function requiresMeasurements(item: ICartItem) {
+export async function requiresMeasurements(item: ICartItem) {
   if (item.kind === 'product') return false;
   if (!item.customDesignId) return false;
 
@@ -33,28 +26,8 @@ async function requiresMeasurements(item: ICartItem) {
   return true;
 }
 
-async function describeCartItem(item: ICartItem) {
-  if (item.kind === 'product' && item.productId) {
-    const product = await productRepository.findById(item.productId.toString());
-    return {
-      name: product?.name ?? 'Product',
-      image: product?.images?.[0]?.url,
-      unitPrice: item.unitPrice,
-    };
-  }
-
-  const design = item.customDesignId
-    ? await CustomDesignModel.findById(item.customDesignId).exec()
-    : null;
-
-  return {
-    name: design?.name || 'Custom Design',
-    unitPrice: item.unitPrice,
-  };
-}
 import * as userRepository from '@repositories/user.repository';
 import { ApiError } from '@utils/apiError';
-import { IMeasurementProfile } from '@models/measurementprofile';
 import {
   CUSTOMER_CANCELLABLE_STATUSES,
   OrderStatus,
@@ -66,156 +39,8 @@ import { OrderTrackingModel } from '@models/tracking';
 import { IOrder } from '@models/order';
 import {
   emitOrderCancelled,
-  emitOrderPlaced,
   emitOrderStatusUpdated,
 } from '@interfaces/events';
-
-function generateOrderNumber(): string {
-  return `ORD-${Date.now()}-${randomUUID().slice(0, 6).toUpperCase()}`;
-}
-
-export async function placeOrder(
-  userId: string,
-  shippingAddress?: string,
-  measurementProfileId?: string,
-  shippingAddressId?: string
-) {
-  const cart = await cartRepository.findByUser(userId);
-  if (!cart || cart.items.length === 0) throw ApiError.badRequest('Cart is empty');
-
-  /**
-   * Resolution order for each line: the profile chosen on the cart item, then
-   * the one passed with the order, then the user's default. A single-profile
-   * customer never chooses anything; a customer ordering for two people can
-   * set it per item.
-   */
-  const orderLevel = measurementProfileId
-    ? await measurementService.assertOwnedProfile(measurementProfileId, userId)
-    : await measurementService.getDefaultProfile(userId);
-
-  const profileCache = new Map<string, IMeasurementProfile>();
-  if (orderLevel) profileCache.set(orderLevel._id.toString(), orderLevel);
-
-  const items = [];
-
-  for (const item of cart.items) {
-    const itemProfileId = item.measurementProfileId?.toString();
-
-    let profile = itemProfileId ? profileCache.get(itemProfileId) ?? null : orderLevel;
-
-    if (itemProfileId && !profile) {
-      profile = await measurementService.assertOwnedProfile(itemProfileId, userId);
-      profileCache.set(itemProfileId, profile);
-    }
-
-    /**
-     * Measurements are required only for made-to-measure lines.
-     *
-     * A garment bought in a standard size, or a pre-designed product bought
-     * as-is, is cut to a size chart — demanding a body profile for those
-     * blocked the entire checkout.
-     */
-    const needsMeasurements = await requiresMeasurements(item);
-
-    if (needsMeasurements && (!profile || profile.values.length === 0)) {
-      throw ApiError.badRequest(
-        'Please add your body measurements before placing this order',
-      );
-    }
-
-    const snapshot = await describeCartItem(item);
-
-    items.push({
-      kind: item.kind,
-      productId: item.productId,
-      customDesignId: item.customDesignId,
-      itemSnapshot: snapshot,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      subtotal: item.unitPrice * item.quantity,
-      measurementProfileId: profile?._id,
-      /* Frozen: renaming or deleting the profile must not alter this order.
-         A standard-size line records the size instead of a body profile. */
-      measurementSnapshot: profile
-        ? {
-            profileName: profile.profileName,
-            values: profile.values.map((v) => ({
-              name: v.name,
-              value: v.value,
-              unit: v.unit,
-            })),
-          }
-        : { profileName: 'Standard size', values: [] },
-    });
-  }
-
-  /* Order-level profile is a convenience reference; a cart of standard-size
-     items legitimately has none. */
-  const measurement = orderLevel ?? (await measurementService.getDefaultProfile(userId));
-
-  const totalAmount = items.reduce((sum, i) => sum + i.subtotal, 0);
-
-  /**
-   * Address resolution mirrors measurements: an explicit id, then a raw string
-   * for a one-off delivery, then the user's default. Flattened to text on the
-   * order so a later edit cannot rewrite where a past order was sent.
-   */
-  const address = shippingAddressId
-    ? await addressService.getAddressById(shippingAddressId, userId)
-    : shippingAddress
-      ? null
-      : await addressService.getDefaultAddress(userId);
-
-  const resolvedAddress = address ? addressService.formatAddress(address) : shippingAddress;
-
-  if (!resolvedAddress) {
-    throw ApiError.badRequest('Please add a shipping address before placing an order');
-  }
-
-  const order = await orderRepository.create({
-    orderNumber: generateOrderNumber(),
-    userId: userId as unknown as never,
-    items,
-    measurementSnapshotId: measurement._id,
-    totalAmount,
-    shippingAddressId: address?._id,
-    shippingAddress: resolvedAddress,
-    status: OrderStatus.PENDING,
-  });
-
-  await orderTrackingRepository.create({
-    orderId: order._id,
-    status: OrderStatus.PENDING,
-    updatedBy: userId as unknown as never,
-    remarks: 'Order placed by customer',
-  });
-
-  /* sort=popular reads this; without the increment it stays 0 forever. */
-  await Promise.all(
-    items
-      .filter((i) => i.kind === 'product' && i.productId)
-      .map((i) =>
-        ProductModel.updateOne(
-          { _id: i.productId },
-          { $inc: { soldCount: i.quantity } }
-        ).exec()
-      )
-  );
-
-  await cartRepository.clearForUser(userId);
-
-  const user = await userRepository.findById(userId);
-  emitOrderPlaced({
-    userId,
-    orderId: order._id.toString(),
-    orderNumber: order.orderNumber,
-    totalAmount,
-    userPhone: user?.phone,
-    userEmail: user?.email,
-  });
-
-  return order;
-}
 
 export function getUserOrders(userId: string, skip: number, limit: number) {
   return Promise.all([
@@ -225,7 +50,7 @@ export function getUserOrders(userId: string, skip: number, limit: number) {
 }
 
 /** When the order was delivered, from its tracking history. */
-export async function deliveredAt(order: IOrder): Promise<Date | null> {
+async function deliveredAt(order: IOrder): Promise<Date | null> {
   if (order.status !== OrderStatus.DELIVERED) return null;
   const entry = await OrderTrackingModel.findOne({
     orderId: order._id,

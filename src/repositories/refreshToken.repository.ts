@@ -16,7 +16,3 @@ export function revoke(token: string) {
   return RefreshTokenModel.findOneAndUpdate({ token }, { revoked: true }, { new: true }).exec();
 }
 
-export function revokeAllForUser(userId: string) {
-  return RefreshTokenModel.updateMany({ userId, revoked: false }, { revoked: true }).exec();
-}
-

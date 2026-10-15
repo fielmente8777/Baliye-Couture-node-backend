@@ -15,12 +15,6 @@ export function getAddresses(userId: string) {
   return addressRepository.findAllByUser(userId);
 }
 
-/** The address an order falls back to when the client picks none. */
-export async function getDefaultAddress(userId: string) {
-  const addresses = await addressRepository.findAllByUser(userId);
-  return addresses.find((a) => a.isDefault) ?? addresses[0] ?? null;
-}
-
 export async function getAddressById(id: string, userId: string) {
   const address = await addressRepository.findByIdForUser(id, userId);
   if (!address) throw ApiError.notFound('Address not found');
@@ -89,18 +83,4 @@ export async function deleteAddress(id: string, userId: string) {
   }
 
   return address;
-}
-
-/** Flattens an address into the single line the order snapshot stores. */
-export function formatAddress(address: IAddress) {
-  return [
-    address.fullName,
-    address.street,
-    address.landmark,
-    `${address.city}, ${address.state} ${address.pincode}`,
-    address.country,
-    address.phone,
-  ]
-    .filter(Boolean)
-    .join('\n');
 }

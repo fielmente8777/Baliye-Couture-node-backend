@@ -1,7 +1,7 @@
 /**
  * Two-stage embroidery transfer.
  *
- * Reproduces the Magnific Spaces canvas in code:
+ * Two stages, both on OpenAI's image edit endpoint:
  *
  *   stage 1  donor garment ──► isolated motif sheet on white
  *   stage 2  target garment + motif sheet ──► finished garment
@@ -17,11 +17,8 @@
 
 import { randomUUID } from "crypto";
 
-import {
-  generateWithReferences,
-  getTask,
-  resolveWebhookUrl,
-} from "@config/magnific";
+import { env } from "@config/env";
+import { generateWithReferences, getTask } from "@config/imageAI";
 import {
   EXTRACT_MOTIFS_PROMPT,
   blendCompositePrompt,
@@ -40,7 +37,8 @@ import { dilateMask, toPortrait } from './garmentRender';
 import { onJobSettled, saveMask } from './blendFinalize';
 import { saveGeneratedImage } from '@config/imageStore';
 
-const webhook = resolveWebhookUrl;
+/* Finishes jobs the moment OpenAI returns (replaces Magnific's webhook). */
+import "./imageTasks";
 
 /**
  * Stage 1 — isolate the trim from a donor garment.
@@ -104,8 +102,7 @@ export async function extractMotifs(
      * into a new design.
      */
     aspectRatio: "traditional_3_4",
-    outputFormat: "png",
-    webhookUrl: webhook(),
+    label: "extract",
   });
 
   return ImageJobModel.create({
@@ -123,8 +120,7 @@ export async function extractMotifs(
 /**
  * Stage 2 — apply a finished motif sheet to a target garment.
  *
- * The sheet is passed by URL because it is Magnific's own output; fetching and
- * re-encoding it to base64 would cost a round trip for no benefit.
+ * The sheet is passed by URL (our own stored copy) or as base64.
  */
 export interface MotifSheetInput {
   /** A URL from stage 1, or base64 for a sheet uploaded from disk. */
@@ -170,8 +166,7 @@ export async function applyMotifs(
 
   for (let i = 0; i < variations; i += 1) {
     const task = await generateWithReferences({
-      /* Slot order still matters for Flux; the labels make it explicit for
-         Nano Banana, which is the point of using it. */
+      /* Image 1 is the garment; the output keeps its exact framing. */
       images: [targetImage, ...labelled.map((sheet) => sheet.image)],
       referenceLabels: [
         "The BASE GARMENT. Keep its colour, fabric, cut, pose and silhouette exactly.",
@@ -181,7 +176,8 @@ export async function applyMotifs(
         ),
       ],
       prompt,
-      webhookUrl: webhook(),
+      preserveFrame: true,
+      label: "apply (sheets)",
     });
 
     jobs.push(
@@ -212,9 +208,10 @@ export async function refreshJob(jobId: string) {
   if (task.status === "COMPLETED") {
     job.status = "completed";
     job.resultUrls = task.generated;
+    job.usage = task.usage;
   } else if (task.status === "FAILED") {
     job.status = "failed";
-    job.error = "Magnific reported a failed generation";
+    job.error = task.error ?? "Image generation failed";
   }
 
   await job.save();
@@ -238,10 +235,6 @@ export async function refreshRun(runId: string) {
       .map((job) => refreshJob(job._id.toString()).catch(() => undefined)),
   );
 
-  return ImageJobModel.find({ runId }).sort({ createdAt: 1 }).exec();
-}
-
-export function getRun(runId: string) {
   return ImageJobModel.find({ runId }).sort({ createdAt: 1 }).exec();
 }
 
@@ -324,9 +317,12 @@ export async function applyAssets(
         'A garment with embroidery already correctly positioned. Blend it in; do not move anything.',
       ],
       prompt,
-      aspectRatio: 'traditional_3_4',
-      outputFormat: 'png',
-      webhookUrl: webhook(),
+      /* Output lines up with the composite, and the mask tells OpenAI where
+         the embroidery is — the only area it should touch. */
+      preserveFrame: true,
+      mask: { data: loose, width: composite.width, height: composite.height },
+      quality: env.openai.quality,
+      label: 'apply (studio blend)',
     });
 
     jobs.push(

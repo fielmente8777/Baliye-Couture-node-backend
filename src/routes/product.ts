@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { validate } from "../middlewares/validate";
-import { productListQuerySchema, slugParamSchema } from "../types/catalog";
+import { slugParamSchema } from "../types/catalog";
 import {
   getProductBySlug,
   getRelatedProducts,

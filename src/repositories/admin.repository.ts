@@ -1,9 +1,5 @@
 import { AdminModel, IAdmin } from '@models/admin';
 
-export function create(data: Partial<IAdmin>) {
-  return AdminModel.create(data);
-}
-
 export function findById(id: string) {
   return AdminModel.findById(id).exec();
 }

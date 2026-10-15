@@ -18,7 +18,7 @@ export const extractMotifs = asyncHandler(async (req: Request, res: Response) =>
     req.body.region,
   );
 
-  /* 202: queued at Magnific, not finished. */
+  /* 202: queued, not finished. */
   ApiResponse.success(res, HttpStatus.ACCEPTED, "Extraction started", job);
 });
 

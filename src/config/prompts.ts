@@ -11,9 +11,6 @@
  * instruction has room to be appended without breaching the cap.
  */
 
-/** Hard ceiling imposed by the provider. */
-export const MAX_PROMPT_CHARS = 3000;
-
 /** Which part of a garment a single extraction call is looking at. */
 export type MotifRegion = "neckline" | "sleeve" | "hem" | "placket" | "motif";
 

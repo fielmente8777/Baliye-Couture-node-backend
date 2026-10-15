@@ -33,6 +33,8 @@ export interface ShopifyOrderItem {
   unitPrice: number;
   /** Shopify product handle — lets the exchange step list sizes in stock. Needs read_products. */
   productHandle?: string;
+  /** Shopify product GID — reviews are keyed to it. Absent if the product was deleted. */
+  productId?: string;
   variantId?: string;
   /** e.g. [{ name: "Size", value: "S" }] */
   selectedOptions: { name: string; value: string }[];
@@ -104,6 +106,7 @@ const ORDERS_QUERY = `
             quantity
             image { url }
             discountedTotalSet { presentmentMoney { amount } }
+            __PRODUCT__
           }
         }
       }
@@ -154,7 +157,7 @@ interface OrdersPayload {
           image: { url: string } | null;
           discountedTotalSet: { presentmentMoney: Money };
           variant?: { id: string; selectedOptions: { name: string; value: string }[] } | null;
-          product?: { handle: string } | null;
+          product?: { id: string; handle: string } | null;
         }[];
       };
     }[];
@@ -182,7 +185,7 @@ const RETURNS_BLOCK = `returns(first: 5) {
 }`;
 
 const PRODUCT_BLOCK = `variant { id selectedOptions { name value } }
-product { handle }`;
+product { id handle }`;
 
 let optionalBlockedUntil = 0;
 
@@ -321,6 +324,7 @@ function toSummary(o: OrderNode): ShopifyOrderSummary {
       returnableQuantity: Math.max(0, returnable.get(li.id) ?? 0),
       unitPrice: li.quantity ? Number(li.discountedTotalSet.presentmentMoney.amount) / li.quantity : 0,
       productHandle: li.product?.handle,
+      productId: li.product?.id,
       variantId: li.variant?.id,
       selectedOptions: li.variant?.selectedOptions ?? [],
       title: li.title,
@@ -348,7 +352,8 @@ export async function getShopifyOrdersForUser(user: IUser): Promise<ShopifyOrder
   for (let page = 0; page < 4; page += 1) {
     let data: OrdersPayload;
     try {
-      data = await adminGraphQL<OrdersPayload>(ORDERS_QUERY, { query: search, first: pageSize, after });
+      /* orderQuery adds the optional product block, and retries without it if Shopify refuses. */
+      data = await orderQuery<OrdersPayload>(ORDERS_QUERY, { query: search, first: pageSize, after });
     } catch (error) {
       /* If Shopify's cost rules tighten, fetch smaller pages rather than none. */
       const message = error instanceof Error ? error.message : String(error);

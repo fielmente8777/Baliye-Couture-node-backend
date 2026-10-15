@@ -28,16 +28,4 @@ export const attachImageSchema = z.object({
     imageUrl: z.string().url(),
   }),
 });
-
-export const jobIdParamSchema = z.object({
-  params: z.object({ id: objectId }),
-});
-
-export const studioGenerateSchema = z.object({
-  body: z.object({
-    referenceImage: z.string().min(100, "Provide a base64 reference image"),
-    prompt: z.string().min(3).max(1000),
-    /** Each variation is a separate paid generation. */
-    variations: z.number().int().min(1).max(4).default(1),
-  }),
-});
+

@@ -6,6 +6,7 @@ import * as productRepository from '../repositories/product.repository';
 import * as measurementService from './measurement';
 import { CartItemKind, ICartItem } from '../models/cart';
 import { CustomDesignModel } from '../models/customdesign';
+import { settleDesignCheckout } from './designCheckout';
 
 /** Both references are populated so the cart page can render either kind. */
 const POPULATE = ['items.productId', 'items.customDesignId'];
@@ -14,7 +15,8 @@ const withRefs = (cart: Awaited<ReturnType<typeof cartRepository.getOrCreateForU
   cart.populate(POPULATE);
 
 export async function getCart(userId: string) {
-  const cart = await cartRepository.getOrCreateForUser(userId);
+  /* Designs already paid for on Shopify leave the cart here. */
+  const cart = await settleDesignCheckout(await cartRepository.getOrCreateForUser(userId));
   return withRefs(cart);
 }
 

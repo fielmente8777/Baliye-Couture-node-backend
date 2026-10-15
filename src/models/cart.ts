@@ -28,6 +28,9 @@ export interface ICart extends Document {
   _id: Types.ObjectId;
   userId: Types.ObjectId;
   items: ICartItem[];
+  /** Open Shopify draft order for this cart's custom designs (checkout in
+      progress). Reused on every "Place order"; cleared once it is paid. */
+  shopifyDraftOrderId?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +65,7 @@ const cartSchema = new Schema<ICart>(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
     items: { type: [cartItemSchema], default: [] },
+    shopifyDraftOrderId: { type: String },
   },
   { timestamps: true }
 );

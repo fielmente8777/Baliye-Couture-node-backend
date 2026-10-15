@@ -15,8 +15,6 @@ import { syncCustomerInBackground } from './shopifyCustomer';
 import { fetchCustomer } from '@config/shopifyAuth';
 import { Role } from "@constants/role";
 import { env } from "@config/env";
-import { logger } from "@config/logger";
-import { smsChannel } from "@interfaces/sms";
 import { sendWhatsAppOtp } from "./whatsapp";
 
 const googleClient = new OAuth2Client(env.google.clientId);
@@ -91,7 +89,7 @@ export async function sendOtp(phone: string): Promise<void> {
  * Validates a code and consumes it. Shared by login and by the phone-change
  * flow, so both enforce the same expiry and attempt limits.
  */
-export async function assertOtpValid(phone: string, code: string) {
+async function assertOtpValid(phone: string, code: string) {
   const otp = await otpRepository.findLatestByPhone(phone);
   if (!otp)
     throw ApiError.badRequest("No OTP request found for this phone number");
@@ -250,7 +248,7 @@ export async function adminLogin(email: string, password: string) {
   return issueTokens(admin._id.toString(), Role.ADMIN);
 }
 
-export async function issueTokens(userId: string, role: Role) {
+async function issueTokens(userId: string, role: Role) {
   const accessToken = signAccessToken({ sub: userId, role });
   const refreshToken = signRefreshToken({ sub: userId, role });
 

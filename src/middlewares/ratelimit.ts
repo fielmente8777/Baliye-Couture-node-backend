@@ -16,7 +16,7 @@ export const globalRateLimiter = rateLimit({
 /**
  * Design renders. Cached combinations cost nothing, but a NEW combination
  * queues one paid generation — this stops one visitor clicking through
- * hundreds of combinations and running up the Magnific bill.
+ * hundreds of combinations and running up the OpenAI bill.
  */
 export const renderRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,

@@ -11,14 +11,6 @@ export interface OrderStatusUpdatedEvent {
   userEmail?: string;
 }
 
-export interface OrderPlacedEvent {
-  userId: string;
-  orderId: string;
-  orderNumber: string;
-  totalAmount: number;
-  userPhone?: string;
-  userEmail?: string;
-}
 
 export interface OrderCancelledEvent {
   userId: string;
@@ -38,10 +30,6 @@ export const notificationEvents = new EventEmitter();
 
 export function emitOrderStatusUpdated(payload: OrderStatusUpdatedEvent) {
   notificationEvents.emit(NotificationEvent.ORDER_STATUS_UPDATED, payload);
-}
-
-export function emitOrderPlaced(payload: OrderPlacedEvent) {
-  notificationEvents.emit(NotificationEvent.ORDER_PLACED, payload);
 }
 
 export function emitOrderCancelled(payload: OrderCancelledEvent) {

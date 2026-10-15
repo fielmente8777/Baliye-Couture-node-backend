@@ -12,10 +12,6 @@ export function findActiveByIds(ids: string[]) {
   return DesignOptionModel.find({ _id: { $in: ids }, isActive: true }).exec();
 }
 
-export function findById(id: string) {
-  return DesignOptionModel.findById(id).exec();
-}
-
 export function updateById(id: string, data: Partial<IDesignOption>) {
   return DesignOptionModel.findByIdAndUpdate(id, data, { new: true }).exec();
 }

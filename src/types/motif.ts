@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Base64 without the data: prefix — the Magnific API rejects data URLs. */
+/** Base64 (a data: URL prefix is also accepted). */
 const base64Image = z.string().min(100, "Provide a base64 image");
 
 export const extractMotifsSchema = z.object({

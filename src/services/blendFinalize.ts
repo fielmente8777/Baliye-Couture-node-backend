@@ -35,7 +35,7 @@ async function loadMask(url: string, width: number, height: number) {
     .toBuffer();
 }
 
-export async function finalizeBlendJob(jobId: string): Promise<void> {
+async function finalizeBlendJob(jobId: string): Promise<void> {
   /* Claim atomically: the webhook and a polling refresh can arrive together. */
   const job = await ImageJobModel.findOneAndUpdate(
     {

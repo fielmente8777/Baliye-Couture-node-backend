@@ -125,6 +125,4 @@ const options: swaggerJsdoc.Options = {
 };
 
 export const swaggerSpec = swaggerJsdoc(options);
-
-/** Exposed so `GET /api-docs.json` can serve the raw spec for Postman import. */
-export const swaggerRouteGlob = routeGlob;
+

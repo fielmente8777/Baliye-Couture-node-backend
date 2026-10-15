@@ -64,7 +64,8 @@ function splitName(fullName: string) {
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 }
 
-function buildInput(address: IAddress) {
+/** Our address -> Shopify's MailingAddressInput. Also used for draft orders. */
+export function buildInput(address: IAddress) {
   const { firstName, lastName } = splitName(address.fullName);
 
   return {
@@ -89,7 +90,7 @@ function buildInput(address: IAddress) {
  * later edits target the same Shopify address instead of creating a
  * duplicate.
  */
-export async function pushAddressCreate(user: IUser, address: IAddress): Promise<void> {
+async function pushAddressCreate(user: IUser, address: IAddress): Promise<void> {
   if (!isShopifyConfigured() || !user.shopifyCustomerId) return;
 
   try {
@@ -120,7 +121,7 @@ export async function pushAddressCreate(user: IUser, address: IAddress): Promise
  * Pushes an edit to Shopify. Falls back to creating the address there if it
  * was never mirrored — e.g. it predates the customer being linked to Shopify.
  */
-export async function pushAddressUpdate(user: IUser, address: IAddress): Promise<void> {
+async function pushAddressUpdate(user: IUser, address: IAddress): Promise<void> {
   if (!isShopifyConfigured() || !user.shopifyCustomerId) return;
 
   if (!address.shopifyAddressId) {
@@ -146,7 +147,7 @@ export async function pushAddressUpdate(user: IUser, address: IAddress): Promise
 }
 
 /** Removes the mirrored address from Shopify when it is deleted here. */
-export async function pushAddressDelete(user: IUser, address: IAddress): Promise<void> {
+async function pushAddressDelete(user: IUser, address: IAddress): Promise<void> {
   if (!isShopifyConfigured() || !user.shopifyCustomerId || !address.shopifyAddressId) return;
 
   try {
