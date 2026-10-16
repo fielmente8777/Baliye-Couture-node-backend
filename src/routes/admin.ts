@@ -3,6 +3,10 @@ import { authenticate } from "../middlewares/auth";
 import { authorize } from "../middlewares/role";
 import { Role } from "../constants/role";
 import { validate } from "../middlewares/validate";
+import { asyncHandler } from "../utils/asyncHandler";
+import { ApiResponse } from "../utils/apiResponse";
+import { HttpStatus } from "../constants/httpstatus";
+import { pullDesignCatalog } from "../services/designCatalogSync";
 
 import {
   catalogIdParamSchema,
@@ -188,6 +192,27 @@ adminRoutes.delete(
   "/garment-types/:id",
   validate(catalogIdParamSchema),
   deleteGarmentType,
+);
+
+/**
+ * @openapi
+ * /admin/design-catalog/sync:
+ *   post:
+ *     summary: Pull the design catalogue from Shopify now
+ *     description: >
+ *       Names, prices, descriptions, colours, images, visibility and order of
+ *       garments and options are edited in Shopify (Design Option metaobjects).
+ *       They are pulled automatically every two minutes; this does it at once.
+ *     tags: [Admin]
+ *     responses:
+ *       200: { description: What was updated, created or skipped }
+ */
+adminRoutes.post(
+  "/design-catalog/sync",
+  asyncHandler(async (_req, res) => {
+    const summary = await pullDesignCatalog();
+    ApiResponse.success(res, HttpStatus.OK, "Design catalogue synced from Shopify", summary);
+  }),
 );
 
 /**

@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { logger } from './config/logger';
 import { connectDB, disconnectDB } from './config/db';
 import { registerNotificationListeners } from './services/notification.listeners';
+import { refreshDesignCatalogIfStale } from './services/designCatalogSync';
 
 /**
  * Every saved image URL is built from PUBLIC_URL. If it is missing in
@@ -28,6 +29,7 @@ async function bootstrap() {
   checkPublicUrl();
   await connectDB();
   registerNotificationListeners();
+  refreshDesignCatalogIfStale();
 
   const app = createApp();
 

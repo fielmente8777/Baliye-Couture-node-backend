@@ -13,7 +13,9 @@
     "seed:embroidery-pairs": "ts-node src/script/embroideryPairs.ts",
     "lint": "eslint \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
-    "seed:catalog": "ts-node src/script/catalog.ts"
+    "seed:catalog": "ts-node src/script/catalog.ts",
+    "design-catalog:pull": "ts-node src/script/designCatalog.ts pull",
+    "design-catalog:push": "ts-node src/script/designCatalog.ts push"
   },
   "dependencies": {
     "axios": "^1.20.0",

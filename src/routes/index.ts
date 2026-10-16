@@ -14,8 +14,15 @@ import aiRoutes from './ai';
 import shopifyRoutes from './shopify';
 import notificationRoutes from './notification';
 import wishlistRoutes from './wishlist';
+import { refreshDesignCatalogIfStale } from '../services/designCatalogSync';
 
 const router = Router();
+
+/* Design catalogue is edited in Shopify — keep the local copy fresh. */
+router.use(['/designs', '/garment-types'], (_req, _res, next) => {
+  refreshDesignCatalogIfStale();
+  next();
+});
 
 router.use('/auth', authRoutes);
 router.use('/profile', profileRoutes);
