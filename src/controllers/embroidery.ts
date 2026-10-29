@@ -26,6 +26,21 @@ export const getAssets = asyncHandler(async (req: Request, res: Response) => {
   ApiResponse.success(res, HttpStatus.OK, 'Assets fetched', assets);
 });
 
+/** Recent finished extractions, and what each was saved as. */
+export const getExtractions = asyncHandler(async (_req: Request, res: Response) => {
+  ApiResponse.success(res, HttpStatus.OK, 'Extractions fetched', await assetService.listExtractions());
+});
+
+export const renameCollection = asyncHandler(async (req: Request, res: Response) => {
+  await assetService.renameCollection(req.params.collectionId, req.body.collectionName);
+  ApiResponse.success(res, HttpStatus.OK, 'Collection renamed');
+});
+
+export const removeCollection = asyncHandler(async (req: Request, res: Response) => {
+  await assetService.deleteCollection(req.params.collectionId);
+  ApiResponse.success(res, HttpStatus.OK, 'Collection deleted');
+});
+
 export const updateAsset = asyncHandler(async (req: Request, res: Response) => {
   const asset = await assetService.updateAsset(req.params.id, req.body);
   ApiResponse.success(res, HttpStatus.OK, 'Asset updated', asset);
@@ -59,6 +74,8 @@ export const applyAssets = asyncHandler(async (req: Request, res: Response) => {
     variations: req.body.variations,
     runId: req.body.runId,
     landmarks: req.body.landmarks,
+    referenceImage: req.body.referenceImage,
+    plan: req.body.plan,
     adminId: req.authUser?.id,
   });
 
@@ -70,7 +87,11 @@ export const previewPlacement = asyncHandler(async (req: Request, res: Response)
   const result = await motifService.previewPlacement(
     req.body.targetImage,
     req.body.assetIds,
-    req.body.landmarks,
+    {
+      landmarks: req.body.landmarks,
+      referenceImage: req.body.referenceImage,
+      plan: req.body.plan,
+    },
   );
 
   ApiResponse.success(res, HttpStatus.OK, 'Preview rendered', result);

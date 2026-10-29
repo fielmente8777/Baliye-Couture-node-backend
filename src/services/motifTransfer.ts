@@ -28,10 +28,12 @@ import {
   extractRegionPrompt,
   type MotifRegion,
 } from "@config/prompts";
+import { IEmbroideryAsset } from '@models/embroideryasset';
 import { ImageJobModel, IImageJob } from "@models/imagejob";
 import { ApiError } from "@utils/apiError";
 import { getApprovedByIds } from './embroideryAssets';
-import { compositeEmbroidery } from './embroideryCompositor';
+import { CompositeResult, compositeEmbroidery, compositeFromPlan, describePieces } from './embroideryCompositor';
+import { PlannedPiece, planFromReference } from './referenceLayout';
 import { Landmarks } from './garmentLandmarks';
 import { dilateMask, toPortrait } from './garmentRender';
 import { onJobSettled, saveMask } from './blendFinalize';
@@ -247,6 +249,39 @@ export function listRuns(limit = 20) {
 }
 
 /**
+ * Builds the layout image, from one of three sources, best first:
+ *   plan       — a layout already read (the preview's), reused so the
+ *                generation matches what the admin approved exactly
+ *   reference  — a photo of the finished source design: one vision call reads
+ *                where every piece sits on it
+ *   neither    — each asset's stored region default
+ */
+async function layoutFor(
+  portrait: Awaited<ReturnType<typeof toPortrait>>,
+  assets: IEmbroideryAsset[],
+  assetIds: string[],
+  options: { landmarks?: Landmarks; referenceImage?: string; plan?: PlannedPiece[] },
+): Promise<{ composite: Omit<CompositeResult, 'landmarks'> & { landmarks?: CompositeResult['landmarks'] }; plan?: PlannedPiece[] }> {
+  const plan = options.plan?.length
+    ? options.plan
+    : options.referenceImage
+      ? await planFromReference(Buffer.from(options.referenceImage, 'base64'), portrait.buffer, assets)
+      : undefined;
+
+  if (plan) return { composite: await compositeFromPlan(portrait.buffer, assets, plan), plan };
+
+  const composite = await compositeEmbroidery(
+    portrait.buffer,
+    assets,
+    /* Seed from the asset set, so the same design scatters butis identically
+       every time while different designs differ. */
+    assetIds.join('').length,
+    options.landmarks ? portrait.mapLandmarks(options.landmarks) : undefined,
+  );
+  return { composite };
+}
+
+/**
  * Stage 2, deterministic placement.
  *
  * Composites approved assets onto the blank garment using their stored
@@ -266,6 +301,10 @@ export async function applyAssets(
     adminId?: string;
     /** Landmarks marked by an operator, when auto-detection is unreliable. */
     landmarks?: Landmarks;
+    /** Photo of the finished source design: copy its layout. */
+    referenceImage?: string;
+    /** A layout already read by the preview — wins over `referenceImage`. */
+    plan?: PlannedPiece[];
   } = {},
 ) {
   const assets = await getApprovedByIds(assetIds);
@@ -280,17 +319,10 @@ export async function applyAssets(
      cannot line its output up with the composite. */
   const portrait = await toPortrait(Buffer.from(targetImage, 'base64'));
 
-  const composite = await compositeEmbroidery(
-    portrait.buffer,
-    assets,
-    /* Seed from the asset set, so the same design scatters butis identically
-       every time while different designs differ. */
-    assetIds.join('').length,
-    options.landmarks ? portrait.mapLandmarks(options.landmarks) : undefined,
-  );
+  const { composite, plan } = await layoutFor(portrait, assets, assetIds, options);
 
   const runId = options.runId ?? randomUUID();
-  const prompt = blendCompositePrompt(options.extra);
+  const prompt = blendCompositePrompt(options.extra, describePieces(assets));
   const variations = Math.min(Math.max(options.variations ?? 1, 1), 4);
   const layout = composite.buffer.toString('base64');
 
@@ -303,9 +335,9 @@ export async function applyAssets(
     Math.max(4, Math.round(composite.width * 0.012)),
   );
   const [compositeUrl, maskUrl, tightMaskUrl] = await Promise.all([
-    saveGeneratedImage(layout),
-    saveMask(loose, composite.width, composite.height),
-    saveMask(composite.embroideryMask, composite.width, composite.height),
+    saveGeneratedImage(layout, 'png', { temporary: true }),
+    saveMask(loose, composite.width, composite.height, true),
+    saveMask(composite.embroideryMask, composite.width, composite.height, true),
   ]);
 
   const jobs: IImageJob[] = [];
@@ -341,7 +373,7 @@ export async function applyAssets(
     );
   }
 
-  return { jobs, placedCount: composite.placedCount, landmarks: composite.landmarks };
+  return { jobs, placedCount: composite.placedCount, landmarks: composite.landmarks, plan };
 }
 
 /**
@@ -354,7 +386,7 @@ export async function applyAssets(
 export async function previewPlacement(
   targetImage: string,
   assetIds: string[],
-  landmarks?: Landmarks,
+  options: { landmarks?: Landmarks; referenceImage?: string; plan?: PlannedPiece[] } = {},
 ) {
   const assets = await getApprovedByIds(assetIds);
 
@@ -365,13 +397,7 @@ export async function previewPlacement(
   }
 
   const portrait = await toPortrait(Buffer.from(targetImage, 'base64'));
-
-  const composite = await compositeEmbroidery(
-    portrait.buffer,
-    assets,
-    assetIds.join('').length,
-    landmarks ? portrait.mapLandmarks(landmarks) : undefined,
-  );
+  const { composite, plan } = await layoutFor(portrait, assets, assetIds, options);
 
   return {
     /* Returned inline rather than saved: a preview is throwaway, and writing
@@ -379,5 +405,8 @@ export async function previewPlacement(
     preview: `data:image/png;base64,${composite.buffer.toString('base64')}`,
     placedCount: composite.placedCount,
     landmarks: composite.landmarks,
+    /* Sent back with Generate, so the paid image uses this exact layout
+       rather than a second reading that could differ. */
+    plan,
   };
 }

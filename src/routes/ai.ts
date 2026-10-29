@@ -17,7 +17,9 @@ import {
   approveAssetSchema,
   assetIdParamSchema,
   buildAssetsSchema,
+  collectionParamSchema,
   detectLandmarksSchema,
+  renameCollectionSchema,
   updateAssetSchema,
 } from "../types/embroidery";
 import {
@@ -28,19 +30,19 @@ import {
   findLandmarks,
   getAssets,
   getCollections,
+  getExtractions,
   removeAsset,
+  removeCollection,
+  renameCollection,
   updateAsset,
 } from "../controllers/embroidery";
 
 /**
  * Embroidery transfer studio.
  *
- * TEMPORARILY UNGUARDED so the feature can be demoed without an admin login.
- *
- * Every call here spends OpenAI credits, so this must not reach production
- * open — anyone who finds the URL could drain the balance in a loop. Restore
- * the guard by uncommenting the line below, and move the frontend calls back
- * to /admin/ai/*.
+ * Mounted under /admin/ai (routes/admin.ts), behind the admin guard: every
+ * call here spends OpenAI credits, so it must never be open — anyone who
+ * found the URL could drain the balance in a loop.
  */
 import {
   baseGarmentIdParamSchema,
@@ -66,14 +68,13 @@ const aiRoutes = Router();
 
 /**
  * @openapi
- * /ai/status:
+ * /admin/ai/status:
  *   get:
  *     summary: Check the OpenAI image setup
  *     description: >
  *       Confirms OPENAI_API_KEY works and the configured model is available,
  *       without generating (or paying for) an image.
  *     tags: [AI Studio]
- *     security: []
  */
 aiRoutes.get(
   "/status",
@@ -85,14 +86,13 @@ aiRoutes.get(
 
 /**
  * @openapi
- * /ai/usage:
+ * /admin/ai/usage:
  *   get:
  *     summary: OpenAI image tokens and estimated cost
  *     description: >
  *       Totals by stage (extract, apply, render, variant) and by day, plus
  *       everything since the backend last started. `?days=30` by default.
  *     tags: [AI Studio]
- *     security: []
  */
 aiRoutes.get(
   "/usage",
@@ -102,18 +102,16 @@ aiRoutes.get(
   }),
 );
 
-// aiRoutes.use(authenticate, authorize(Role.ADMIN));
 
 /**
  * @openapi
- * /ai/extract-motifs:
+ * /admin/ai/extract-motifs:
  *   post:
  *     summary: Stage 1 — isolate embroidery from a donor garment
  *     description: >
  *       Returns a job immediately. Poll `/ai/runs/{runId}` until it completes,
  *       then pass its result URL to /ai/apply-motifs. One paid generation.
  *     tags: [AI Studio]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -127,14 +125,13 @@ aiRoutes.post("/extract-motifs", validate(extractMotifsSchema), extractMotifs);
 
 /**
  * @openapi
- * /ai/apply-motifs:
+ * /admin/ai/apply-motifs:
  *   post:
  *     summary: Stage 2 — apply a motif sheet to a target garment
  *     description: >
  *       `motifSheetImage` is the result URL from stage 1, or a base64 sheet.
  *       Each variation is a separate paid generation.
  *     tags: [AI Studio]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -148,12 +145,11 @@ aiRoutes.post("/apply-motifs", validate(applyMotifsSchema), applyMotifs);
 
 /**
  * @openapi
- * /ai/runs/{runId}:
+ * /admin/ai/runs/{runId}:
  *   get:
  *     summary: Poll every job in a run
  *     description: Refreshes any pending generations before returning.
  *     tags: [AI Studio]
- *     security: []
  *     parameters:
  *       - name: runId
  *         in: path
@@ -166,11 +162,10 @@ aiRoutes.get("/runs/:runId", validate(runIdParamSchema), getRun);
 
 /**
  * @openapi
- * /ai/runs:
+ * /admin/ai/runs:
  *   get:
  *     summary: Studio history
  *     tags: [AI Studio]
- *     security: []
  *     responses:
  *       200: { description: Recent jobs, newest first }
  */
@@ -178,7 +173,7 @@ aiRoutes.get("/runs", listRuns);
 
 /**
  * @openapi
- * /ai/assets/build:
+ * /admin/ai/assets/build:
  *   post:
  *     summary: Split a finished extraction into named embroidery assets
  *     description: >
@@ -186,7 +181,6 @@ aiRoutes.get("/runs", listRuns);
  *       gets a name, a garment region and default placement, and starts
  *       unapproved. Pass `sourceInkHex` to check for colour drift.
  *     tags: [AI Studio]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -199,23 +193,25 @@ aiRoutes.post("/assets/build", validate(buildAssetsSchema), buildAssets);
 
 /**
  * @openapi
- * /ai/assets/collections:
+ * /admin/ai/assets/collections:
  *   get:
  *     summary: Embroidery collections, newest first
  *     tags: [AI Studio]
- *     security: []
  *     responses:
  *       200: { description: Collections with asset and approval counts }
  */
 aiRoutes.get("/assets/collections", getCollections);
+/* Finished extractions + what each was saved as, so an unsaved one can be reopened. */
+aiRoutes.get("/extractions", getExtractions);
+aiRoutes.patch("/assets/collections/:collectionId", validate(renameCollectionSchema), renameCollection);
+aiRoutes.delete("/assets/collections/:collectionId", validate(collectionParamSchema), removeCollection);
 
 /**
  * @openapi
- * /ai/assets:
+ * /admin/ai/assets:
  *   get:
  *     summary: List embroidery assets
  *     tags: [AI Studio]
- *     security: []
  *     parameters:
  *       - name: collectionId
  *         in: query
@@ -230,7 +226,7 @@ aiRoutes.get("/assets", getAssets);
 
 /**
  * @openapi
- * /ai/assets/{id}:
+ * /admin/ai/assets/{id}:
  *   put:
  *     summary: Rename an asset, change its region, or adjust its placement
  *     description: >
@@ -238,7 +234,6 @@ aiRoutes.get("/assets", getAssets);
  *       an explicit placement is sent — otherwise a piece relabelled from buti
  *       to neckline keeps buti scaling and lands wrong.
  *     tags: [AI Studio]
- *     security: []
  *     parameters:
  *       - $ref: '#/components/parameters/IdParam'
  *     requestBody:
@@ -251,7 +246,6 @@ aiRoutes.get("/assets", getAssets);
  *   delete:
  *     summary: Delete an asset
  *     tags: [AI Studio]
- *     security: []
  *     parameters:
  *       - $ref: '#/components/parameters/IdParam'
  *     responses:
@@ -262,12 +256,11 @@ aiRoutes.delete("/assets/:id", validate(assetIdParamSchema), removeAsset);
 
 /**
  * @openapi
- * /ai/assets/{id}/approve:
+ * /admin/ai/assets/{id}/approve:
  *   patch:
  *     summary: Approve or unapprove an asset
  *     description: Only approved assets can be applied to a garment.
  *     tags: [AI Studio]
- *     security: []
  *     parameters:
  *       - $ref: '#/components/parameters/IdParam'
  *     requestBody:
@@ -282,7 +275,7 @@ aiRoutes.patch("/assets/:id/approve", validate(approveAssetSchema), approveAsset
 
 /**
  * @openapi
- * /ai/landmarks:
+ * /admin/ai/landmarks:
  *   post:
  *     summary: Detect garment landmarks on a blank suit
  *     description: >
@@ -291,7 +284,6 @@ aiRoutes.patch("/assets/:id/approve", validate(approveAssetSchema), approveAsset
  *       similar backdrop cannot be separated by colour — and the operator
  *       should mark the landmarks instead.
  *     tags: [AI Studio]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -304,7 +296,7 @@ aiRoutes.post("/landmarks", validate(detectLandmarksSchema), findLandmarks);
 
 /**
  * @openapi
- * /ai/assets/apply:
+ * /admin/ai/assets/apply:
  *   post:
  *     summary: Apply approved assets to a garment with deterministic placement
  *     description: >
@@ -312,7 +304,6 @@ aiRoutes.post("/landmarks", validate(detectLandmarksSchema), findLandmarks);
  *       anchors, then uses one generation call purely to blend and relight.
  *       Placement is arithmetic; only realism is generated. Same cost as before.
  *     tags: [AI Studio]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:
@@ -326,7 +317,7 @@ aiRoutes.post("/assets/apply", validate(applyAssetsSchema), applyAssets);
 
 /**
  * @openapi
- * /ai/assets/preview:
+ * /admin/ai/assets/preview:
  *   post:
  *     summary: Render the composite without generating
  *     description: >
@@ -334,7 +325,6 @@ aiRoutes.post("/assets/apply", validate(applyAssetsSchema), applyAssets);
  *       operator can adjust placement and re-check freely before spending a
  *       generation.
  *     tags: [AI Studio]
- *     security: []
  *     requestBody:
  *       required: true
  *       content:

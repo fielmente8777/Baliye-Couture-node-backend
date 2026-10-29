@@ -10,6 +10,20 @@ export async function getContent(page: ContentPage) {
 }
 
 /** Replaces the whole page — the editor always sends every section. */
+/**
+ * When any page was last saved — what open browsers poll to know they should
+ * refresh. One tiny indexed read, cached for a second, so even many open tabs
+ * asking every few seconds cost next to nothing.
+ */
+let versionCache: { at: number; value: string } | null = null;
+export async function contentVersion(): Promise<string> {
+  if (versionCache && Date.now() - versionCache.at < 1000) return versionCache.value;
+  const latest = await SiteContentModel.findOne().sort({ updatedAt: -1 }).select('updatedAt').lean().exec();
+  const value = latest?.updatedAt ? new Date(latest.updatedAt).toISOString() : '0';
+  versionCache = { at: Date.now(), value };
+  return value;
+}
+
 export async function saveContent(page: ContentPage, data: Record<string, unknown>, adminId?: string) {
   const doc = await SiteContentModel.findOneAndUpdate(
     { page },
@@ -18,6 +32,7 @@ export async function saveContent(page: ContentPage, data: Record<string, unknow
   )
     .lean()
     .exec();
+  versionCache = null;
   return { data: doc.data, updatedAt: doc.updatedAt };
 }
 

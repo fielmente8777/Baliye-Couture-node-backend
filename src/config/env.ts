@@ -114,7 +114,29 @@ export const env = {
     timeoutMs: Number(process.env.OPENAI_IMAGE_TIMEOUT_MS || 300000),
     /** Generations running at once. Raise on higher OpenAI tiers. */
     concurrency: Number(process.env.OPENAI_IMAGE_CONCURRENCY || 2),
+    /**
+     * Small text+vision model that names extracted embroidery pieces and
+     * says where each sits (left shoulder, hem…). A fraction of a cent per
+     * collection; if it fails, the free shape-based guess is used instead.
+     */
+    visionModel: process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini",
+    /**
+     * Reads where every piece sits on the source photo, for "copy layout
+     * from source". Needs real spatial accuracy, so a larger model than the
+     * labeller; still one text call (a few cents) per layout.
+     */
+    layoutModel: process.env.OPENAI_LAYOUT_MODEL || "gpt-4.1",
+    /** "Write with AI" in the admin content editor. A fraction of a cent per use. */
+    textModel: process.env.OPENAI_TEXT_MODEL || "gpt-4.1-mini",
   },
+
+  /**
+   * Where generated images (embroidery pieces, renders, recolours) are kept.
+   * "shopify" (default): Shopify Files — one bill, and it survives redeploys,
+   * which this server's disk does not on Render. Falls back to disk when
+   * Shopify isn't configured or an upload fails. "disk": always local.
+   */
+  imageStore: process.env.IMAGE_STORE === "disk" ? "disk" : "shopify",
 
   /**
    * Design credits: customers spend them on AI design previews. This is the

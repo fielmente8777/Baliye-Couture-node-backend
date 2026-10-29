@@ -20,10 +20,14 @@ import { DRIFT_LIMIT, embroideryDrift, restoreOutsideMask } from './garmentRende
  * customer picked, whatever the model did.
  */
 
-/** Masks are stored as greyscale PNGs; read back as raw single-channel. */
-export async function saveMask(mask: Buffer, width: number, height: number) {
+/**
+ * Masks are stored as greyscale PNGs; read back as raw single-channel.
+ * `temporary`: only needed until this job's blend finishes, so it stays on
+ * this server's disk instead of filling Shopify Files.
+ */
+export async function saveMask(mask: Buffer, width: number, height: number, temporary = false) {
   const png = await sharp(mask, { raw: { width, height, channels: 1 } }).png().toBuffer();
-  return saveGeneratedImage(png.toString('base64'));
+  return saveGeneratedImage(png.toString('base64'), 'png', { temporary });
 }
 
 async function loadMask(url: string, width: number, height: number) {

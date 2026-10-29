@@ -43,6 +43,25 @@ const FIDELITY = [
   "preserve less rather than invent more.",
 ].join(" ");
 
+/**
+ * How to arrange the pieces on the sheet: like the garment seen from the
+ * front. The sheet's layout then carries each piece's position, which is what
+ * the splitter and the labeller read to name it — "top-left corner" means
+ * left shoulder, "long strip at the bottom" means hem border.
+ */
+const SHEET_LAYOUT = [
+  "Arrange the pieces on the sheet in the same places they occupy on the",
+  "garment seen from the front: neckline and yoke work at the top centre;",
+  "shoulder work in the top-left and top-right corners; sleeve and cuff work",
+  "down the far left and far right edges; chest and waist work in the middle;",
+  "hem (daaman) borders as long horizontal strips along the bottom. Work that",
+  "appears on the left side of the photo goes on the left of the sheet, and on",
+  "the right goes on the right. If the same work appears on both sides, show",
+  "it once, on the left. For small motifs repeated all over (butis), show ONE",
+  "of each distinct design, not every repeat. Each continuous border is one",
+  "single strip, never broken into pieces.",
+].join(" ");
+
 /** Whole-garment extraction from a single photograph. */
 export const EXTRACT_MOTIFS_PROMPT = [
   "IMAGE EXTRACTION TASK. The reference image shows a garment with embroidery.",
@@ -50,6 +69,7 @@ export const EXTRACT_MOTIFS_PROMPT = [
   FIDELITY,
   "Lay each element out flat, unfolded and front-facing, separated by clear",
   "space. Keep physically separate elements separate.",
+  SHEET_LAYOUT,
 ].join(" ");
 
 /** One cropped border — the most faithful mode when you want just the neckline. */
@@ -87,6 +107,7 @@ export const extractFromViewsPrompt = (views: DonorView[]) =>
     FIDELITY,
     "Lay each element out flat, unfolded and front-facing, separated by clear",
     "space. Keep physically separate elements separate.",
+    SHEET_LAYOUT,
   ].join(" ");
 
 /** Shared rules for applying a sheet to a garment. */
@@ -165,10 +186,13 @@ export const recolourGarmentPrompt = (colourName: string, hex: string, extra?: s
  * stitched — which it does well — instead of deciding placement, which it does
  * badly. This is what removes the drift.
  */
-export const blendCompositePrompt = (extra?: string) =>
+export const blendCompositePrompt = (extra?: string, pieces?: string[]) =>
   [
     'The reference image is a garment with embroidery already positioned',
     'correctly on it. The embroidery currently looks flat and pasted on.',
+    /* What each piece is made of, so zari reads as metal and resham as
+       thread — never where to put it, which is already decided. */
+    pieces?.length ? `The embroidery on it: ${pieces.join(' ')}` : '',
     'Blend it into the fabric so it appears physically stitched: match the',
     "garment's lighting and shadow, give the thread and beadwork real relief and",
     'texture, and follow the drape, folds and curvature of the cloth beneath it.',

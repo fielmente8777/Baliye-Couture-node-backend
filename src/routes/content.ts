@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { validate } from '../middlewares/validate';
-import { getContent } from '../controllers/siteContent';
+import { getContent, getContentVersion } from '../controllers/siteContent';
 import { contentPageParamSchema } from '../types/siteContent';
 
 const contentRoutes = Router();
@@ -18,10 +18,13 @@ const contentRoutes = Router();
  *       - name: page
  *         in: path
  *         required: true
- *         schema: { type: string, enum: [home, footer, terms] }
+ *         schema: { type: string, enum: [home, footer, terms, products] }
  *     responses:
  *       200: { description: Saved content or null }
  */
+/* Before /:page, or "version" would be read as a page name. Polled by open
+   browsers to refresh within seconds of an admin save. */
+contentRoutes.get('/version', getContentVersion);
 contentRoutes.get('/:page', validate(contentPageParamSchema), getContent);
 
 export default contentRoutes;

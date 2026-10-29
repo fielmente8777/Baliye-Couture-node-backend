@@ -8,6 +8,7 @@ import { env } from '@config/env';
 
 import { IEmbroideryAsset, IPlacement } from '@models/embroideryasset';
 import { ACCEPTABLE_CONFIDENCE, Landmarks, detectLandmarks } from './garmentLandmarks';
+import type { PlannedPiece } from './referenceLayout';
 
 /**
  * Places embroidery assets onto a blank garment, deterministically.
@@ -58,6 +59,20 @@ export async function fetchAsset(url: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
+/**
+ * One sentence per placed piece, for the blend prompt — "Gold zari paisley
+ * motif with sequins, on both shoulders." Tells the model what the material
+ * is (metal thread, mirror, resham) so it renders it right; placement is
+ * already fixed by the composite and the mask.
+ */
+export function describePieces(assets: IEmbroideryAsset[]): string[] {
+  return assets
+    .filter((a) => a.region !== 'back')
+    .map((a) => a.description || (a.workType ? `${a.workType} ${a.name}.` : ''))
+    .filter(Boolean)
+    .slice(0, 12);
+}
+
 const anchorPoint = (landmarks: Landmarks, anchor: IPlacement['anchor']) => {
   switch (anchor) {
     case 'neckline_point': return landmarks.neckline;
@@ -99,14 +114,14 @@ function seeded(seed: number) {
 async function prepare(
   assetBuffer: Buffer,
   targetWidth: number,
-  placement: IPlacement,
+  rotation: number,
   flip: boolean,
 ): Promise<Buffer> {
   let pipeline = sharp(assetBuffer).resize({ width: Math.max(8, Math.round(targetWidth)) });
 
   if (flip) pipeline = pipeline.flop();
-  if (placement.rotation) {
-    pipeline = pipeline.rotate(placement.rotation, {
+  if (rotation) {
+    pipeline = pipeline.rotate(rotation, {
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     });
   }
@@ -158,6 +173,10 @@ export async function compositeEmbroidery(
   const random = seeded(seed);
 
   for (const asset of assets) {
+    /* Back-of-garment work is kept for the record; the blank garment is
+       always a front view, so there is nowhere to put it. */
+    if (asset.region === 'back') continue;
+
     const { placement } = asset;
     const assetBuffer = await fetchAsset(asset.assetUrl);
 
@@ -169,7 +188,7 @@ export async function compositeEmbroidery(
        motifs in identical spots. */
     if (asset.region === 'buti') {
       const count = 14;
-      const prepared = await prepare(assetBuffer, targetW, placement, false);
+      const prepared = await prepare(assetBuffer, targetW, placement.rotation, false);
       const bw = targetW;
       const bh = targetW * ratio;
 
@@ -224,7 +243,7 @@ export async function compositeEmbroidery(
 
     const place = async (anchorName: IPlacement['anchor'], flip: boolean, sign: number) => {
       const anchor = anchorPoint(landmarks, anchorName);
-      const prepared = await prepare(assetBuffer, targetW, placement, flip);
+      const prepared = await prepare(assetBuffer, targetW, placement.rotation, flip);
       const pm = await sharp(prepared).metadata();
 
       layers.push({
@@ -270,16 +289,72 @@ export async function compositeEmbroidery(
     }))
     .filter((layer) => layer.left >= 0 && layer.top >= 0 && layer.left < W && layer.top < H);
 
-  const buffer = await sharp(garmentImage).composite(safe).png().toBuffer();
+  return { ...(await flatten(garmentImage, safe, W, H)), landmarks };
+}
+
+/** Pastes the layers, and records where they went as the embroidery mask. */
+async function flatten(garmentImage: Buffer, layers: Placed[], W: number, H: number) {
+  const buffer = await sharp(garmentImage).composite(layers).png().toBuffer();
 
   /* Same layers on a transparent canvas; their combined alpha is the mask. */
   const embroideryMask = await sharp({
     create: { width: W, height: H, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
   })
-    .composite(safe)
+    .composite(layers)
     .png()
     .toBuffer()
     .then((png) => sharp(png).ensureAlpha().extractChannel(3).raw().toBuffer());
 
-  return { buffer, landmarks, placedCount: safe.length, embroideryMask, width: W, height: H };
+  return { buffer, placedCount: layers.length, embroideryMask, width: W, height: H };
+}
+
+/**
+ * Places pieces exactly where a layout plan says — the plan read off the
+ * source photo by `planFromReference`.
+ *
+ * No region defaults, no buti scatter, no torso clamp: the plan already put
+ * every copy on the garment, and clamping to shoulder width would pull the
+ * salwar and cuff work inwards. Only pieces that fall off the canvas go.
+ */
+export async function compositeFromPlan(
+  garmentImage: Buffer,
+  assets: IEmbroideryAsset[],
+  plan: PlannedPiece[],
+): Promise<Omit<CompositeResult, 'landmarks'>> {
+  const meta = await sharp(garmentImage).metadata();
+  const W = meta.width ?? 0;
+  const H = meta.height ?? 0;
+  if (!W || !H) throw new Error('Could not read the garment dimensions');
+
+  const byId = new Map(assets.map((a) => [a._id.toString(), a]));
+  const buffers = new Map<string, Buffer>();
+  const layers: Placed[] = [];
+
+  for (const piece of plan) {
+    const asset = byId.get(piece.assetId);
+    if (!asset) continue;
+
+    if (!buffers.has(piece.assetId)) buffers.set(piece.assetId, await fetchAsset(asset.assetUrl));
+    const prepared = await prepare(
+      buffers.get(piece.assetId)!,
+      Math.min(piece.width, 1) * W,
+      piece.rotation,
+      piece.flip,
+    );
+    const pm = await sharp(prepared).metadata();
+    const pw = pm.width ?? 0;
+    const ph = pm.height ?? 0;
+    if (pw >= W || ph >= H) continue;
+
+    /* Kept wholly inside the canvas, so sharp never has to clip. */
+    layers.push({
+      input: prepared,
+      left: Math.max(0, Math.min(Math.round(piece.x * W - pw / 2), W - pw)),
+      top: Math.max(0, Math.min(Math.round(piece.y * H - ph / 2), H - ph)),
+    });
+  }
+
+  if (layers.length === 0) throw new Error('None of the planned pieces fit on this garment');
+
+  return flatten(garmentImage, layers, W, H);
 }

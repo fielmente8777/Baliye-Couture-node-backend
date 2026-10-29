@@ -16,9 +16,12 @@ import { OptionModel } from '@models/option';
 import { OptionGroupModel } from '@models/optiongroup';
 import { ApiError } from '@utils/apiError';
 import { saveMask } from './blendFinalize';
-import { compositeEmbroidery, fetchAsset } from './embroideryCompositor';
+import { compositeEmbroidery, describePieces, fetchAsset } from './embroideryCompositor';
 import { dilateMask, garmentMask, recolour, toPortrait } from './garmentRender';
 import { ACCEPTABLE_CONFIDENCE, Landmarks, detectLandmarks } from './garmentLandmarks';
+
+/** AI Studio embroidery on customer previews. Off: studio is admin testing only for now. */
+const STUDIO_EMBROIDERY_ON_WEBSITE = false;
 import { refreshJob } from './motifTransfer';
 
 /**
@@ -270,8 +273,11 @@ export async function renderDesign(input: RenderInput): Promise<RenderResponse> 
     image = await recolour(image, mask, colour.hex);
   }
 
-  /* 2. Embroidery — exact placement, by code. */
-  const assets = embroidery?.assetCollectionId
+  /* 2. Embroidery — exact placement, by code.
+     Switched off: AI Studio embroidery is for testing in the admin only,
+     until the client confirms how it should appear to customers. Flip
+     STUDIO_EMBROIDERY_ON_WEBSITE to true to place linked collections again. */
+  const assets = STUDIO_EMBROIDERY_ON_WEBSITE && embroidery?.assetCollectionId
     ? await EmbroideryAssetModel.find({
         collectionId: embroidery.assetCollectionId,
         isApproved: true,
@@ -326,11 +332,11 @@ export async function renderDesign(input: RenderInput): Promise<RenderResponse> 
 
   try {
     const [maskUrl, tightMaskUrl] = await Promise.all([
-      saveMask(loose, composite.width, composite.height),
-      saveMask(composite.embroideryMask, composite.width, composite.height),
+      saveMask(loose, composite.width, composite.height, true),
+      saveMask(composite.embroideryMask, composite.width, composite.height, true),
     ]);
 
-    const prompt = blendCompositePrompt();
+    const prompt = blendCompositePrompt(undefined, describePieces(assets));
     const task = await generateWithReferences({
       images: [composite.buffer.toString('base64')],
       referenceLabels: [

@@ -75,8 +75,9 @@ import { grantTokensSchema, recordAiCreditSchema, tokenUserParamSchema } from ".
 
 import { memoryUpload } from "../middlewares/file";
 import * as catalogAdmin from "../controllers/adminCatalog";
-import { saveContent, uploadImage } from "../controllers/siteContent";
-import { saveContentSchema } from "../types/siteContent";
+import { saveContent, uploadImage, writeContent } from "../controllers/siteContent";
+import aiRoutes from "./ai";
+import { saveContentSchema, writeContentSchema } from "../types/siteContent";
 import {
   catalogImageSchema,
   catalogItemIdSchema,
@@ -92,6 +93,10 @@ const adminRoutes = Router();
 
 /** Every route below is admin-only; the guard is applied once here. */
 adminRoutes.use(authenticate, authorize(Role.ADMIN));
+
+/* AI Studio — embroidery extraction, pieces, try-on. Spends OpenAI credit,
+   so it lives behind the admin guard. */
+adminRoutes.use("/ai", aiRoutes);
 
 /**
  * @openapi
@@ -508,6 +513,8 @@ adminRoutes.delete("/catalog/options/:id", validate(catalogItemIdSchema), catalo
  *     responses:
  *       200: { description: The image url }
  */
+/* Before /content/:page. "Write with AI" for any text field in the editor. */
+adminRoutes.post("/content/write", validate(writeContentSchema), writeContent);
 adminRoutes.put("/content/:page", validate(saveContentSchema), saveContent);
 adminRoutes.post("/uploads", memoryUpload.single("file"), uploadImage);
 

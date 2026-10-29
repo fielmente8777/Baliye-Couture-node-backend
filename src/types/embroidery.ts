@@ -1,15 +1,29 @@
 import { z } from 'zod';
 
+import { EMBROIDERY_REGIONS, EMBROIDERY_SIDES } from '../models/embroideryasset';
+
 const objectId = z.string().length(24);
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a #rrggbb colour');
 
 export const buildAssetsSchema = z.object({
-  body: z.object({
-    jobId: objectId,
-    collectionName: z.string().min(1).max(120),
-    /** Enables the colour-drift check against the source garment's ink. */
-    sourceInkHex: hex.optional(),
-  }),
+  body: z
+    .object({
+      /** A finished extraction… */
+      jobId: objectId.optional(),
+      /** …or a clean embroidery sheet, base64 — split for free, no generation. */
+      sheetImage: z.string().min(100).optional(),
+      collectionName: z.string().trim().min(1).max(120),
+      /** Add to this existing collection rather than starting a new one. */
+      collectionId: z.string().min(1).max(40).optional(),
+      /** Small garment photos so the labeller can see where each piece sits. */
+      references: z
+        .array(z.object({ image: z.string().min(100), label: z.string().max(80).optional() }))
+        .max(4)
+        .optional(),
+      /** Enables the colour-drift check against the source garment's ink. */
+      sourceInkHex: hex.optional(),
+    })
+    .refine((b) => Boolean(b.jobId) !== Boolean(b.sheetImage), 'Send either an extraction or a sheet image'),
 });
 
 const placementSchema = z.object({
@@ -36,21 +50,22 @@ const placementSchema = z.object({
 export const updateAssetSchema = z.object({
   params: z.object({ id: objectId }),
   body: z.object({
-    name: z.string().min(1).max(120).optional(),
-    region: z
-      .enum([
-        'neckline',
-        'chest',
-        'sleeve_cuff',
-        'sleeve_body',
-        'hem_border',
-        'placket',
-        'buti',
-        'lower_hem',
-      ])
-      .optional(),
+    name: z.string().trim().min(1).max(120).optional(),
+    region: z.enum(EMBROIDERY_REGIONS).optional(),
+    side: z.enum(EMBROIDERY_SIDES).optional(),
+    workType: z.string().trim().max(60).optional(),
+    description: z.string().trim().max(300).optional(),
     placement: placementSchema.optional(),
   }),
+});
+
+export const collectionParamSchema = z.object({
+  params: z.object({ collectionId: z.string().min(1).max(40) }),
+});
+
+export const renameCollectionSchema = z.object({
+  params: z.object({ collectionId: z.string().min(1).max(40) }),
+  body: z.object({ collectionName: z.string().trim().min(1).max(120) }),
 });
 
 export const approveAssetSchema = z.object({
@@ -82,6 +97,16 @@ export const landmarksSchema = z.object({
   bottom: z.number(),
 });
 
+/** One copy of a piece, as read off the source photo (fractions of the target). */
+const plannedPieceSchema = z.object({
+  assetId: objectId,
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  width: z.number().min(0.002).max(1),
+  rotation: z.number().min(-180).max(180).default(0),
+  flip: z.boolean().default(false),
+});
+
 export const applyAssetsSchema = z.object({
   body: z.object({
     targetImage: z.string().min(100, 'Provide a base64 garment image'),
@@ -90,6 +115,10 @@ export const applyAssetsSchema = z.object({
     variations: z.number().int().min(1).max(4).default(1),
     runId: z.string().uuid().optional(),
     landmarks: landmarksSchema.optional(),
+    /** Photo of the finished source design (base64): copy where its work sits. */
+    referenceImage: z.string().min(100).optional(),
+    /** The layout the preview read, reused so the generation matches it. */
+    plan: z.array(plannedPieceSchema).max(80).optional(),
   }),
 });
 

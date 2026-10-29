@@ -150,10 +150,11 @@ export interface SplitPiece {
 /**
  * Guesses the region from shape and position on the sheet.
  *
- * The extraction prompt lays pieces out in a consistent order — neckline at the
- * top, borders at the bottom — so aspect ratio plus vertical position is a
- * reliable first pass. The operator confirms or corrects in the approval
- * screen, which is where accuracy actually comes from.
+ * The extraction prompt lays the sheet out like the garment seen from the
+ * front — neck at the top centre, shoulders in the top corners, sleeves at the
+ * outer edges, borders along the bottom — so shape plus position is a
+ * reasonable first pass. It is only the fallback: the vision labeller
+ * (embroideryLabeller.ts) normally decides, and the admin confirms.
  */
 function classify(
   box: Box,
@@ -163,13 +164,16 @@ function classify(
 ): { region: EmbroideryRegion; name: string } {
   const w = width(box) / sheetW;
   const h = height(box) / sheetH;
+  const cx = (box.x0 + width(box) / 2) / sheetW;
   const cy = (box.y0 + height(box) / 2) / sheetH;
   const aspect = w / Math.max(h, 0.0001);
+  const outerEdge = cx < 0.25 || cx > 0.75;
 
   /* Long and thin: a border. Which border depends on how far down it sits. */
   if (aspect > 3.5 && w > 0.4) {
-    if (cy > 0.72) return { region: 'lower_hem', name: 'Lower Hem Border' };
-    return { region: 'hem_border', name: 'Hem Border' };
+    if (cy >= 0.6) return { region: 'hem_border', name: 'Hem Border' };
+    if (cy >= 0.35) return { region: 'waist', name: 'Waist Band' };
+    return { region: 'yoke', name: 'Yoke Border' };
   }
 
   /* Small and roughly square, and there will be several: scattered butis. */
@@ -177,15 +181,19 @@ function classify(
     return { region: 'buti', name: `Buti ${index + 1}` };
   }
 
-  /* Wide, near the top, wider than tall: the neckline V. */
-  if (cy < 0.35 && aspect > 0.9) {
+  /* Top band: the neckline in the middle, shoulders in the corners. */
+  if (cy < 0.32) {
+    if (outerEdge) return { region: 'shoulder', name: 'Shoulder Motif' };
     return { region: 'neckline', name: 'Neckline Border' };
   }
 
-  /* Mid-sheet, upright: a chest or sleeve motif. */
-  if (cy < 0.62) return { region: 'chest', name: 'Chest Motif' };
+  /* Outer edges further down: the sleeves. */
+  if (outerEdge) {
+    if (cy < 0.6) return { region: 'sleeve_body', name: 'Sleeve Motif' };
+    return { region: 'sleeve_cuff', name: 'Sleeve Cuff Border' };
+  }
 
-  return { region: 'sleeve_cuff', name: 'Sleeve Motif' };
+  return { region: 'chest', name: 'Chest Motif' };
 }
 
 /**
