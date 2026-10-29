@@ -35,6 +35,7 @@ const options: swaggerJsdoc.Options = {
       { name: 'Shopify', description: 'Store connection and customer mirror' },
       { name: 'AI Studio', description: 'Embroidery motif extraction and transfer' },
       { name: 'Admin', description: 'Dashboard: catalog, products and users' },
+      { name: 'Content', description: 'Website copy and images edited in the admin panel' },
       { name: 'Addresses', description: 'The signed-in user’s saved shipping addresses' },
       { name: 'Measurements', description: 'Admin templates and user measurements' },
       { name: 'Design', description: 'Design option catalog and saved suit designs' },

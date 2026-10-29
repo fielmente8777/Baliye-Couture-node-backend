@@ -115,4 +115,15 @@ export const env = {
     /** Generations running at once. Raise on higher OpenAI tiers. */
     concurrency: Number(process.env.OPENAI_IMAGE_CONCURRENCY || 2),
   },
+
+  /**
+   * Design credits: customers spend them on AI design previews. This is the
+   * DEFAULT only — the admin's switch (Admin → Design credits) overrides it
+   * once saved. Off: previews are free and need no sign-in.
+   */
+  tokens: {
+    enabled: process.env.TOKENS_ENABLED === "true",
+    /** Tokens one NEW colour generation costs. Cached previews are free. */
+    recolourCost: Math.max(1, Number(process.env.TOKEN_COST_RECOLOUR || 1)),
+  },
 };

@@ -68,6 +68,26 @@ import {
   updateReplacementSchema,
 } from "../types/replacement";
 
+import { getAiCredit, getCreditStats, getUserLedger, grantTokens, recordAiCredit } from "../controllers/tokens";
+import { updateSettings } from "../controllers/settings";
+import { updateSettingsSchema } from "../types/settings";
+import { grantTokensSchema, recordAiCreditSchema, tokenUserParamSchema } from "../types/tokens";
+
+import { memoryUpload } from "../middlewares/file";
+import * as catalogAdmin from "../controllers/adminCatalog";
+import { saveContent, uploadImage } from "../controllers/siteContent";
+import { saveContentSchema } from "../types/siteContent";
+import {
+  catalogImageSchema,
+  catalogItemIdSchema,
+  createCatalogGarmentSchema,
+  createCatalogGroupSchema,
+  createCatalogOptionSchema,
+  updateCatalogGarmentSchema,
+  updateCatalogGroupSchema,
+  updateCatalogOptionSchema,
+} from "../types/adminCatalog";
+
 const adminRoutes = Router();
 
 /** Every route below is admin-only; the guard is applied once here. */
@@ -110,6 +130,77 @@ adminRoutes.put("/me", updateAdminProfile);
  *       200: { description: Paginated users }
  */
 adminRoutes.get("/users", getAllUsers);
+
+/**
+ * @openapi
+ * /admin/tokens/grant:
+ *   post:
+ *     summary: Add design tokens to a customer (negative amount corrects down)
+ *     description: >
+ *       How tokens are distributed until online purchase is wired: the customer
+ *       pays, the admin adds the pack's tokens here. Every change is logged.
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, amount]
+ *             properties:
+ *               userId: { type: string }
+ *               amount: { type: integer }
+ *               note: { type: string }
+ *               reason: { type: string, enum: [grant, purchase] }
+ * /admin/tokens/{userId}:
+ *   get:
+ *     summary: A customer's token history
+ *     tags: [Admin]
+ */
+adminRoutes.post("/tokens/grant", validate(grantTokensSchema), grantTokens);
+
+/**
+ * @openapi
+ * /admin/tokens/stats:
+ *   get:
+ *     summary: Credit usage across all customers — totals and one row per customer with credit activity
+ *     tags: [Admin]
+ */
+adminRoutes.get("/tokens/stats", getCreditStats);
+
+/**
+ * @openapi
+ * /admin/ai-credit:
+ *   get:
+ *     summary: The store's own AI credit — prepaid OpenAI balance left, spend, designs it still covers
+ *     tags: [Admin]
+ *   post:
+ *     summary: Record the balance shown on OpenAI's billing page, or a top-up made there
+ *     tags: [Admin]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [kind, amountUsd]
+ *             properties:
+ *               kind: { type: string, enum: [balance, topup] }
+ *               amountUsd: { type: number }
+ *               note: { type: string }
+ */
+adminRoutes.get("/ai-credit", getAiCredit);
+adminRoutes.post("/ai-credit", validate(recordAiCreditSchema), recordAiCredit);
+adminRoutes.get("/tokens/:userId", validate(tokenUserParamSchema), getUserLedger);
+
+/**
+ * @openapi
+ * /admin/settings:
+ *   put:
+ *     summary: Flip feature switches (design credits on/off)
+ *     tags: [Admin]
+ */
+adminRoutes.put("/settings", validate(updateSettingsSchema), updateSettings);
 
 /**
  * @openapi
@@ -350,5 +441,74 @@ adminRoutes.delete("/orders/:id", validate(idParamSchema), deleteOrderAdmin);
 /* ---- Replacement & alteration requests ---- */
 adminRoutes.get("/replacements", validate(replacementListQuerySchema), adminListReplacements);
 adminRoutes.patch("/replacements/:id", validate(updateReplacementSchema), adminUpdateReplacement);
+
+/* ---- Design Builder (create-your-own-design) ----
+   Shopify-owned fields (name, price, description, colour, visibility, order,
+   images) are written to Shopify and MongoDB together, so the two-minute
+   pull from Shopify does not undo them. Steps and pairing rules are
+   MongoDB only. See services/adminCatalog.ts. */
+
+/**
+ * @openapi
+ * /admin/catalog:
+ *   get:
+ *     summary: Everything the Design Builder screen needs
+ *     description: Garments, steps, options, measurement fields, and image urls by key as Shopify has them.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Catalogue }
+ * /admin/catalog/images:
+ *   post:
+ *     summary: Upload a design image to Shopify and attach it to its key
+ *     description: >
+ *       multipart/form-data with `file` and `key` (garment/<slug>,
+ *       preview/<slug> or option/<step code>/<option value>).
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: The key and its new image url }
+ */
+adminRoutes.get("/catalog", catalogAdmin.getCatalog);
+adminRoutes.post(
+  "/catalog/images",
+  memoryUpload.single("file"),
+  validate(catalogImageSchema),
+  catalogAdmin.uploadCatalogImage,
+);
+
+adminRoutes.post("/catalog/garments", validate(createCatalogGarmentSchema), catalogAdmin.createGarment);
+adminRoutes.put("/catalog/garments/:id", validate(updateCatalogGarmentSchema), catalogAdmin.updateGarment);
+adminRoutes.delete("/catalog/garments/:id", validate(catalogItemIdSchema), catalogAdmin.deleteGarment);
+
+adminRoutes.post("/catalog/groups", validate(createCatalogGroupSchema), catalogAdmin.createGroup);
+adminRoutes.put("/catalog/groups/:id", validate(updateCatalogGroupSchema), catalogAdmin.updateGroup);
+adminRoutes.post("/catalog/groups/:groupId/options", validate(createCatalogOptionSchema), catalogAdmin.createOption);
+
+adminRoutes.put("/catalog/options/:id", validate(updateCatalogOptionSchema), catalogAdmin.updateOption);
+adminRoutes.delete("/catalog/options/:id", validate(catalogItemIdSchema), catalogAdmin.deleteOption);
+
+/* ---- Website content ---- */
+
+/**
+ * @openapi
+ * /admin/content/{page}:
+ *   put:
+ *     summary: Save a page's content (home, footer, terms)
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Saved }
+ * /admin/uploads:
+ *   post:
+ *     summary: Upload a website image to Shopify Files
+ *     description: multipart/form-data with `file`. Returns the CDN url.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: The image url }
+ */
+adminRoutes.put("/content/:page", validate(saveContentSchema), saveContent);
+adminRoutes.post("/uploads", memoryUpload.single("file"), uploadImage);
 
 export default adminRoutes;

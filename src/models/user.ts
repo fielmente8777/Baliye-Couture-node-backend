@@ -22,6 +22,8 @@ export interface IUser extends Document {
    * two of our users can never point at one Shopify customer.
    */
   shopifyCustomerId?: string;
+  /** Design tokens left. Only ever changed through services/tokens.ts. */
+  tokenBalance: number;
   isPhoneVerified: boolean;
   isEmailVerified: boolean;
   isActive: boolean;
@@ -46,6 +48,7 @@ const userSchema = new Schema<IUser>(
     googleId: { type: String, unique: true, sparse: true },
     shopifyCustomerId: { type: String, unique: true, sparse: true },
     microsoftId: { type: String, unique: true, sparse: true },
+    tokenBalance: { type: Number, default: 0, min: 0 },
     isPhoneVerified: { type: Boolean, default: false },
     isEmailVerified: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },

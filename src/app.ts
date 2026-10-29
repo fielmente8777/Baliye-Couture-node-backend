@@ -83,9 +83,11 @@ export function createApp(): Application {
     }),
   );
 
-  app.use(requestLogger);
-  app.use(globalRateLimiter);
-
+  /**
+   * Uptime pings (UptimeRobot / cron-job.org) hit this every few minutes to
+   * keep the Render free instance awake. Above the logger and rate limiter so
+   * they neither flood the logs nor eat into the 200-requests budget.
+   */
   app.get("/health", (_req, res) => {
     res.status(200).json({
       success: true,
@@ -93,6 +95,9 @@ export function createApp(): Application {
       data: { uptime: process.uptime() },
     });
   });
+
+  app.use(requestLogger);
+  app.use(globalRateLimiter);
 
   /**
    * Raw spec — import this URL straight into Postman or Insomnia.

@@ -134,6 +134,30 @@ export const applyMotifSheetsPrompt = (sheetLabels: string[], extra?: string) =>
     .join(" ");
 
 /**
+ * Re-dyes the fabric of a real product photo, keeping everything else.
+ *
+ * The photo already carries its embroidery, so a pixel recolour would dye the
+ * thread too. The model can tell fabric from embroidery; the negatives keep it
+ * from "improving" the rest of the picture while it is there.
+ */
+export const recolourGarmentPrompt = (colourName: string, hex: string, extra?: string) =>
+  [
+    'The reference image is a studio product photograph of a garment on a',
+    'mannequin. Change ONLY the colour of the garment fabric (every piece of',
+    `the outfit) to ${colourName} (${hex.toUpperCase()}), as if the same cloth`,
+    'had been dyed that colour: keep its folds, creases, shading, sheen and',
+    'weave exactly, so lighter and darker areas stay lighter and darker.',
+    'Do NOT recolour the embroidery, thread work, zari, sequins, beads, stones',
+    'or lace — they keep their original colours exactly.',
+    'Do NOT move, add, remove or redraw any embroidery. Do NOT change the cut,',
+    'neckline, sleeves, length, pose, mannequin, stand, background, lighting or',
+    'framing. No text, logos or watermarks.',
+    extra ?? '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+/**
  * Stage 2 when the embroidery has already been positioned by the compositor.
  *
  * The reference image arrives with every motif in the right anatomical place,

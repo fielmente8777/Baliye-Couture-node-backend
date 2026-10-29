@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middlewares/auth';
+import { authenticate, optionalAuthenticate } from '../middlewares/auth';
 import { authorize } from '../middlewares/role';
 import { Role } from '../constants/role';
 import { validate } from '../middlewares/validate';
@@ -17,8 +17,14 @@ import {
   getMyDesigns,
   quotePrice,
 } from '../controllers/design.v2';
-import { getRender, renderDesign } from '../controllers/designRender';
-import { renderDesignSchema, renderKeyParamSchema } from '../types/render';
+import {
+  getColourRender,
+  getRender,
+  lookupColourRender,
+  recolourPhoto,
+  renderDesign,
+} from '../controllers/designRender';
+import { recolourPhotoSchema, renderDesignSchema, renderKeyParamSchema } from '../types/render';
 import { renderRateLimiter } from '../middlewares/ratelimit';
 
 const designRoutes = Router();
@@ -90,6 +96,52 @@ designRoutes.post('/quote', validate(quotePriceSchema), quotePrice);
  */
 designRoutes.post('/render', renderRateLimiter, validate(renderDesignSchema), renderDesign);
 designRoutes.get('/render/:key', validate(renderKeyParamSchema), getRender);
+
+/**
+ * @openapi
+ * /designs/recolour:
+ *   post:
+ *     tags: [Designs]
+ *     summary: The design photo re-dyed to a colour option
+ *     description: >
+ *       AI re-dyes the fabric of a real garment photo (Shopify CDN or our own
+ *       uploads) to the chosen Colour option, keeping embroidery, cut and pose.
+ *       Cached per photo + colour. While status is "generating", poll
+ *       GET /designs/recolour/{key}; show url when status is "ready".
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [imageUrl, colourOptionId]
+ *             properties:
+ *               imageUrl: { type: string }
+ *               colourOptionId: { type: string }
+ */
+designRoutes.post(
+  '/recolour',
+  renderRateLimiter,
+  optionalAuthenticate,
+  validate(recolourPhotoSchema),
+  recolourPhoto
+);
+
+/**
+ * @openapi
+ * /designs/recolour/lookup:
+ *   post:
+ *     tags: [Designs]
+ *     summary: Is this photo + colour already generated?
+ *     description: >
+ *       Free and never starts anything. Returns the cached recolour, or null.
+ *       With design tokens on, the builder calls this first and only offers a
+ *       paid preview when it returns null.
+ *     security: []
+ */
+designRoutes.post('/recolour/lookup', validate(recolourPhotoSchema), lookupColourRender);
+designRoutes.get('/recolour/:key', validate(renderKeyParamSchema), getColourRender);
 
 /**
  * @openapi

@@ -31,7 +31,7 @@ import { OptionGroupModel } from '@models/optiongroup';
 export const DESIGN_OPTION_TYPE = 'design_image';
 
 /** Field keys on the Shopify definition. */
-const F = {
+export const F = {
   key: 'key',
   image: 'image',
   label: 'label',
@@ -42,7 +42,7 @@ const F = {
   position: 'position',
 } as const;
 
-interface ShopifyEntry {
+export interface ShopifyEntry {
   id: string;
   key: string;
   values: Map<string, string>;
@@ -79,7 +79,7 @@ const ENTRIES_QUERY = `
   }
 `;
 
-async function fetchEntries(): Promise<ShopifyEntry[]> {
+export async function fetchEntries(): Promise<ShopifyEntry[]> {
   const entries: ShopifyEntry[] = [];
   let after: string | null = null;
 

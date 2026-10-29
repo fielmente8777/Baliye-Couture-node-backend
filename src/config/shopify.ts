@@ -174,6 +174,9 @@ export const REQUIRED_SCOPES = [
   'read_returns',
   'write_returns',
   'read_products',
+  /* Design Builder and website images in the admin panel. */
+  'write_metaobjects',
+  'write_files',
 ];
 
 /** How the backend authenticates, for the status endpoint. */

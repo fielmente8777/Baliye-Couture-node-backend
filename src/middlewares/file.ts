@@ -32,3 +32,13 @@ export const upload = multer({
   fileFilter,
   limits: { fileSize: env.upload.maxFileSizeMb * 1024 * 1024 },
 });
+
+/**
+ * Kept in memory instead of on disk — for images forwarded straight to
+ * Shopify Files, where a local copy would only pile up.
+ */
+export const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter,
+  limits: { fileSize: env.upload.maxFileSizeMb * 1024 * 1024 },
+});

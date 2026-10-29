@@ -2,6 +2,7 @@ import { onTaskSettled } from '@config/imageAI';
 import { logger } from '@config/logger';
 import { ImageJobModel } from '@models/imagejob';
 import { onJobSettled } from './blendFinalize';
+import { settleColourRender } from './colourRender';
 
 /**
  * Finishes an ImageJob as soon as its OpenAI generation returns — the role
@@ -15,6 +16,9 @@ import { onJobSettled } from './blendFinalize';
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 onTaskSettled(async (task) => {
+  /* Customer colour previews have no ImageJob — they keep their own row. */
+  if (await settleColourRender(task)) return;
+
   const update =
     task.status === 'COMPLETED'
       ? { status: 'completed', resultUrls: task.generated, usage: task.usage }

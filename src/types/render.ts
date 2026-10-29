@@ -17,6 +17,13 @@ export const renderKeyParamSchema = z.object({
   params: z.object({ key: z.string().regex(/^[a-f0-9]{40}$/) }),
 });
 
+export const recolourPhotoSchema = z.object({
+  body: z.object({
+    imageUrl: z.string().url().max(2048),
+    colourOptionId: objectId,
+  }),
+});
+
 export const createBaseGarmentSchema = z.object({
   body: z.object({
     garmentTypeId: objectId,

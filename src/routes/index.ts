@@ -14,6 +14,9 @@ import aiRoutes from './ai';
 import shopifyRoutes from './shopify';
 import notificationRoutes from './notification';
 import wishlistRoutes from './wishlist';
+import contentRoutes from './content';
+import tokenRoutes from './tokens';
+import settingsRoutes from './settings';
 import { refreshDesignCatalogIfStale } from '../services/designCatalogSync';
 
 const router = Router();
@@ -39,5 +42,8 @@ router.use('/ai', aiRoutes);
 router.use('/shopify', shopifyRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/wishlist', wishlistRoutes);
+router.use('/content', contentRoutes);
+router.use('/tokens', tokenRoutes);
+router.use('/settings', settingsRoutes);
 
 export default router;
