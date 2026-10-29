@@ -42,3 +42,15 @@ export const memoryUpload = multer({
   fileFilter,
   limits: { fileSize: env.upload.maxFileSizeMb * 1024 * 1024 },
 });
+
+/** Design Builder spreadsheets (.xlsx or .csv), read in memory and never stored. */
+export const sheetUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (!/\.(xlsx|csv)$/i.test(file.originalname)) {
+      return cb(new ApiError(400, 'Upload an .xlsx or .csv file') as unknown as Error);
+    }
+    cb(null, true);
+  },
+  limits: { fileSize: 5 * 1024 * 1024, files: 2 },
+});

@@ -73,7 +73,7 @@ import { updateSettings } from "../controllers/settings";
 import { updateSettingsSchema } from "../types/settings";
 import { grantTokensSchema, recordAiCreditSchema, tokenUserParamSchema } from "../types/tokens";
 
-import { memoryUpload } from "../middlewares/file";
+import { memoryUpload, sheetUpload } from "../middlewares/file";
 import * as catalogAdmin from "../controllers/adminCatalog";
 import { saveContent, uploadImage, writeContent } from "../controllers/siteContent";
 import aiRoutes from "./ai";
@@ -492,6 +492,31 @@ adminRoutes.post("/catalog/groups/:groupId/options", validate(createCatalogOptio
 
 adminRoutes.put("/catalog/options/:id", validate(updateCatalogOptionSchema), catalogAdmin.updateOption);
 adminRoutes.delete("/catalog/options/:id", validate(catalogItemIdSchema), catalogAdmin.deleteOption);
+
+/**
+ * @openapi
+ * /admin/catalog/sheet:
+ *   get:
+ *     summary: Download the Design Builder spreadsheet (.xlsx)
+ *     description: Blank template by default; `?filled=true` fills it with the catalogue as it stands.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: The workbook }
+ * /admin/catalog/import:
+ *   post:
+ *     summary: Bulk add or update garments and options from the spreadsheet
+ *     description: >
+ *       multipart/form-data with up to two `files` (.xlsx, or Garments and
+ *       Options .csv). Previews by default and writes nothing; `?apply=true`
+ *       saves, and only when no row has an error. Never deletes.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Per-row report, step rule changes and warnings }
+ */
+adminRoutes.get("/catalog/sheet", catalogAdmin.downloadCatalogSheet);
+adminRoutes.post("/catalog/import", sheetUpload.array("files", 2), catalogAdmin.importCatalog);
 
 /* ---- Website content ---- */
 

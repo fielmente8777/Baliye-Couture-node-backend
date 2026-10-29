@@ -13,6 +13,7 @@
  * MongoDB only.
  */
 
+import { AsyncLocalStorage } from 'async_hooks';
 import { Types } from 'mongoose';
 import { adminGraphQL, isShopifyConfigured } from '@config/shopify';
 import { logger } from '@config/logger';
@@ -21,10 +22,10 @@ import { OptionGroupModel, IOptionGroup } from '@models/optiongroup';
 import { OptionModel, IOption } from '@models/option';
 import { MeasurementTemplateModel } from '@models/measurementtemplate';
 import { ApiError } from '@utils/apiError';
-import { DESIGN_OPTION_TYPE, F, fetchEntries } from './designCatalogSync';
+import { DESIGN_OPTION_TYPE, F, fetchEntries, ShopifyEntry } from './designCatalogSync';
 import { uploadImageToShopify } from './shopifyFiles';
 
-const slugify = (value: string) =>
+export const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 /** Paise here, rupees in Shopify. */
@@ -48,6 +49,18 @@ const UPDATE = `
 type UserErrors = { message: string }[];
 
 /**
+ * A bulk import writes many entries; reading every Shopify entry before each
+ * one would take minutes. Inside withEntryCache the list is read once, and
+ * keys created meanwhile are remembered so none is created twice.
+ */
+const entryCache = new AsyncLocalStorage<{ entries: ShopifyEntry[]; created: Set<string> }>();
+
+export async function withEntryCache<T>(fn: () => Promise<T>): Promise<T> {
+  if (!isShopifyConfigured()) return fn();
+  return entryCache.run({ entries: await fetchEntries(), created: new Set() }, fn);
+}
+
+/**
  * Creates or updates the Design Option entry for `key`. Undefined values are
  * left as they are in Shopify; an empty string clears the field.
  */
@@ -58,7 +71,16 @@ async function writeEntry(key: string, values: Record<string, string | undefined
     .filter((entry): entry is [string, string] => entry[1] !== undefined)
     .map(([k, value]) => ({ key: k, value }));
 
-  const existing = (await fetchEntries()).find((e) => e.key === key);
+  const cache = entryCache.getStore();
+  const find = (entries: ShopifyEntry[]) => entries.find((e) => e.key === key);
+  let existing = find(cache?.entries ?? (await fetchEntries()));
+
+  /* Created earlier in this import: its id isn't known without a re-read. */
+  if (!existing && cache?.created.has(key)) {
+    if (!fields.length) return;
+    cache.entries = await fetchEntries();
+    existing = find(cache.entries);
+  }
 
   let errors: UserErrors;
   if (existing) {
@@ -77,6 +99,7 @@ async function writeEntry(key: string, values: Record<string, string | undefined
       },
     });
     errors = res.metaobjectCreate.userErrors;
+    if (!errors.length) cache?.created.add(key);
   }
 
   if (errors.length) {
