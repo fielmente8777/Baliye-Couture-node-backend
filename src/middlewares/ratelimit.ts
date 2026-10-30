@@ -1,9 +1,32 @@
+import type { Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import { env } from '../config/env';
+import { Role } from '../constants/role';
+import { verifyAccessToken } from '../utils/jwt';
+
+/** A signed-in admin: the panel loads and uploads a lot, and an admin token can't be had without logging in. */
+function isAdmin(req: Request) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) return false;
+  try {
+    return verifyAccessToken(header.slice(7)).role === Role.ADMIN;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The designer asks every few seconds whether a preview is ready, for up to
+ * 90 s. Those checks are free reads of one key; the paid start is limited by
+ * renderRateLimiter.
+ */
+const isPreviewStatusCheck = (req: Request) =>
+  req.method === 'GET' && /\/designs\/(recolour|render)\/[^/]+$/.test(req.path);
 
 export const globalRateLimiter = rateLimit({
   windowMs: env.rateLimit.windowMs,
   max: env.rateLimit.max,
+  skip: (req) => isPreviewStatusCheck(req) || isAdmin(req),
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -39,6 +62,18 @@ export const otpRateLimiter = rateLimit({
   message: {
     success: false,
     message: 'Too many OTP requests, please try again later',
+    errors: [],
+  },
+});
+/** Newsletter sign-up form: a person signs up once, a script signs up thousands. */
+export const newsletterRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many sign-ups from here, please try again later',
     errors: [],
   },
 });

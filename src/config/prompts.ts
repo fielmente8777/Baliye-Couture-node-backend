@@ -178,6 +178,62 @@ export const recolourGarmentPrompt = (colourName: string, hex: string, extra?: s
     .filter(Boolean)
     .join(' ');
 
+export interface RestyleChange {
+  /** Option group code: 'fabric', 'embroidery', 'sleeve'… */
+  code: string;
+  /** Option group label: "Fabric". */
+  group: string;
+  /** Option label: "Chanderi". */
+  label: string;
+  description?: string;
+  /** Colour options only. */
+  hex?: string;
+  /** 1-based index of this option's picture among the input images. */
+  imageIndex?: number;
+}
+
+/** How to apply a choice from each kind of group; others get the generic rule. */
+const RESTYLE_RULES: Record<string, string> = {
+  color:
+    'Colour: dye the garment fabric that colour as if the same cloth had been dyed, keeping folds, creases, shading and sheen. Embroidery, zari, sequins and beads keep their own colours.',
+  fabric:
+    "Fabric: make the cloth look like that fabric (texture, weave, drape, sheen and weight). Keep the garment's colour unless a colour is listed.",
+  embroidery:
+    'Embroidery: replace the existing embroidery with that style, placed where it naturally sits on this garment (neckline, sleeves, hem, borders), stitched and realistic, not pasted on. When its reference image is a sheet of embroidery pieces on white, copy those exact motifs, colours and threads, and put each piece where it is listed (neckline, shoulders, cuffs, hem…), sized to this garment.',
+};
+
+/**
+ * Edits a real product photo to show several of the customer's choices at
+ * once: colour, fabric, embroidery, neck, sleeve, length… Each option's own
+ * picture (swatch, illustration) is passed as a further input image.
+ */
+export const restyleGarmentPrompt = (changes: RestyleChange[]) => {
+  const lines = changes.map((c) => {
+    const hex = c.hex ? ` (${c.hex.toUpperCase()})` : '';
+    const description = c.description ? ` — ${c.description}` : '';
+    const image = c.imageIndex ? ` (see image ${c.imageIndex})` : '';
+    return `- ${c.group}: ${c.label}${hex}${description}${image}.`;
+  });
+  const codes = new Set(changes.map((c) => c.code));
+  const rules = Object.entries(RESTYLE_RULES)
+    .filter(([code]) => codes.has(code))
+    .map(([, rule]) => rule);
+  if (changes.some((c) => !RESTYLE_RULES[c.code])) {
+    rules.push(
+      'Neck, sleeve, length, cuff, lower and similar: reshape only that part of the garment to match the choice; the rest of the garment stays as it is.',
+    );
+  }
+
+  return [
+    'Image 1 is a studio product photograph of a garment on a mannequin.',
+    "Edit it so the garment shows the customer's choices below, and change nothing else:",
+    lines.join('\n'),
+    rules.join(' '),
+    'Any further images are pictures of the chosen options (swatches or illustrations) — use them only as a reference for the look; do not paste them into the photo.',
+    'Keep the mannequin, stand, pose, background, lighting, camera angle and framing of image 1 exactly. Photorealistic. No text, logos or watermarks.',
+  ].join('\n');
+};
+
 /**
  * Stage 2 when the embroidery has already been positioned by the compositor.
  *

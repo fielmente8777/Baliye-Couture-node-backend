@@ -5,19 +5,22 @@ import { env } from '@config/env';
 import { generateWithReferences, getTask } from '@config/imageAI';
 import type { ImageUsage } from '@config/imageUsage';
 import { logger } from '@config/logger';
-import { recolourGarmentPrompt } from '@config/prompts';
+import { recolourGarmentPrompt, restyleGarmentPrompt, type RestyleChange } from '@config/prompts';
 import { ColourRenderModel, IColourRender } from '@models/colourrender';
 import { OptionModel } from '@models/option';
 import { OptionGroupModel } from '@models/optiongroup';
 import { ApiError } from '@utils/apiError';
 import { refundTokens, spendTokens, tokensEnabled } from './tokens';
+import { collectionLooks } from './embroideryAssets';
 
 /**
- * The design preview in the customer's chosen colour.
+ * The design preview showing the customer's choices.
  *
  * The builder shows a real photograph of the suit. When the customer picks a
  * colour, the image model re-dyes the fabric of THAT photo and leaves the
- * embroidery, cut and pose alone. One generation per photo + colour, ever.
+ * embroidery, cut and pose alone. Other choices (fabric, embroidery, sleeve,
+ * neck…) are applied the same way, with each option's picture as a reference.
+ * One generation per photo + set of choices, ever.
  *
  * With design tokens on, only the request that starts a NEW generation pays;
  * a failed generation is refunded.
@@ -32,9 +35,31 @@ const RETRY_AFTER_MS = 2 * 60 * 1000;
 /** A generation still "generating" after this long was lost (server restart). */
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
+/** Same idea as RECOLOUR_VERSION, for previews with more than a colour. */
+const RESTYLE_VERSION = 'r1';
+
+/** Option pictures sent along as references, at most. */
+const MAX_REFERENCES = 8;
+
 export interface RecolourInput {
   imageUrl: string;
-  colourOptionId: string;
+  /** Colour only (older clients). */
+  colourOptionId?: string;
+  /** Every chosen option that should show in the picture, with its picture. */
+  options?: { optionId: string; imageUrl?: string }[];
+}
+
+interface Change extends Omit<RestyleChange, 'imageIndex'> {
+  optionId: Types.ObjectId;
+  /** The option's own picture, when it is one of ours. */
+  reference?: string;
+}
+
+/** What one generation needs, worked out from the request. */
+interface Plan {
+  key: string;
+  changes: Change[];
+  colour?: Change;
 }
 
 export interface RecolourResponse {
@@ -56,43 +81,119 @@ const toResponse = (render: IColourRender): RecolourResponse => ({
  * and this server's uploads. Anything else would let a caller spend image
  * credits on arbitrary pictures and make the server fetch arbitrary URLs.
  */
-function assertOwnImage(imageUrl: string) {
+function isOwnImage(imageUrl: string) {
   let url: URL;
   try {
     url = new URL(imageUrl);
   } catch {
-    throw ApiError.badRequest('imageUrl must be a full URL');
+    return false;
   }
 
   const own = new URL(env.publicUrl);
   const isShopify = url.protocol === 'https:' && url.hostname === 'cdn.shopify.com';
   const isUpload = url.origin === own.origin && url.pathname.startsWith('/uploads/');
-
-  if (!isShopify && !isUpload) throw ApiError.badRequest('That image cannot be recoloured');
+  return isShopify || isUpload;
 }
 
-async function colourOption(optionId: string) {
-  if (!Types.ObjectId.isValid(optionId)) throw ApiError.badRequest('Invalid colour option');
+function assertOwnImage(imageUrl: string) {
+  if (!isOwnImage(imageUrl)) throw ApiError.badRequest('That image cannot be recoloured');
+}
 
-  const option = await OptionModel.findOne({ _id: optionId, isDeleted: false }).exec();
-  if (!option) throw ApiError.notFound('Colour option not found');
+/** Size never shows in a photo; every other group can. */
+const isVisualGroup = (group: { code: string; inputType: string }) =>
+  group.code !== 'size' && group.inputType !== 'size_select';
 
-  const group = await OptionGroupModel.findById(option.groupId).exec();
-  if (group?.code !== 'color') throw ApiError.badRequest('That is not a Colour option');
-  if (!option.hex || !/^#[0-9a-fA-F]{6}$/.test(option.hex)) {
-    throw ApiError.badRequest(`${option.label} has no colour value set`);
+async function resolveChanges(input: RecolourInput): Promise<Change[]> {
+  const requested = input.options?.length
+    ? input.options
+    : [{ optionId: input.colourOptionId!, imageUrl: undefined }];
+
+  const changes: Change[] = [];
+  const seen = new Set<string>();
+  for (const { optionId, imageUrl } of requested) {
+    if (seen.has(optionId)) continue;
+    seen.add(optionId);
+    if (!Types.ObjectId.isValid(optionId)) throw ApiError.badRequest('Invalid option');
+
+    const option = await OptionModel.findOne({ _id: optionId, isDeleted: false }).exec();
+    if (!option) throw ApiError.notFound('Option not found');
+    const group = await OptionGroupModel.findById(option.groupId).exec();
+    if (!group || !isVisualGroup(group)) continue;
+
+    let hex: string | undefined;
+    if (group.code === 'color') {
+      if (!option.hex || !/^#[0-9a-fA-F]{6}$/.test(option.hex)) {
+        throw ApiError.badRequest(`${option.label} has no colour value set`);
+      }
+      hex = option.hex.toLowerCase();
+    }
+
+    /* Embroidery made in AI Studio: the extracted sheet is the reference
+       (whatever the browser sent), and every approved piece is described with
+       where it goes, so the preview shows that exact embroidery. */
+    const look =
+      group.code === 'embroidery' && option.assetCollectionId
+        ? (await collectionLooks([option.assetCollectionId])).get(option.assetCollectionId)
+        : undefined;
+
+    /* A colour is described by its hex; its swatch adds nothing. Pictures
+       from anywhere else are dropped, not refused. */
+    const reference = look?.cover ?? (!hex && imageUrl && isOwnImage(imageUrl) ? imageUrl : undefined);
+    changes.push({
+      optionId: option._id,
+      code: group.code,
+      group: group.label,
+      label: option.label,
+      description: look
+        ? `this exact embroidery, every piece as shown in its reference image: ${look.layout}`
+        : option.description,
+      hex,
+      reference,
+    });
   }
 
-  return { id: option._id, label: option.label, hex: option.hex };
+  if (!changes.length) throw ApiError.badRequest('None of those options change the picture');
+  return changes;
 }
 
-async function resolve(input: RecolourInput) {
+async function resolve(input: RecolourInput): Promise<Plan> {
   assertOwnImage(input.imageUrl);
-  const colour = await colourOption(input.colourOptionId);
-  const key = createHash('sha1')
-    .update(JSON.stringify([RECOLOUR_VERSION, input.imageUrl, colour.hex.toLowerCase()]))
-    .digest('hex');
-  return { colour, key };
+  const changes = await resolveChanges(input);
+  const colour = changes.find((c) => c.code === 'color');
+
+  /* Colour alone keeps its original key, so previews made before other
+     choices were supported stay cached. */
+  const parts =
+    changes.length === 1 && colour
+      ? [RECOLOUR_VERSION, input.imageUrl, colour.hex]
+      : [
+          RESTYLE_VERSION,
+          input.imageUrl,
+          changes.map((c) => [c.optionId.toString(), c.hex ?? '', c.reference ?? '']).sort(),
+        ];
+  const key = createHash('sha1').update(JSON.stringify(parts)).digest('hex');
+  return { key, changes, colour };
+}
+
+/** The image model's inputs: the photo first, then each option's picture. */
+function generation(sourceUrl: string, plan: Plan) {
+  if (plan.changes.length === 1 && plan.colour) {
+    return {
+      images: [sourceUrl],
+      referenceLabels: ['The garment photograph to re-dye.'],
+      prompt: recolourGarmentPrompt(plan.colour.label, plan.colour.hex!),
+    };
+  }
+
+  const images = [sourceUrl];
+  const referenceLabels = ['The garment photograph to edit.'];
+  const changes: RestyleChange[] = plan.changes.map(({ code, group, label, description, hex, reference }) => {
+    if (!reference || images.length > MAX_REFERENCES) return { code, group, label, description, hex };
+    images.push(reference);
+    referenceLabels.push(`${group}: ${label} (reference only).`);
+    return { code, group, label, description, hex, imageIndex: images.length };
+  });
+  return { images, referenceLabels, prompt: restyleGarmentPrompt(changes) };
 }
 
 /** Marks the attempt failed and gives back whatever it cost. */
@@ -131,11 +232,7 @@ async function refresh(render: IColourRender): Promise<IColourRender> {
 }
 
 /** Charges for the attempt (when tokens are on), then starts the generation. */
-async function start(
-  render: IColourRender,
-  colour: { label: string; hex: string },
-  userId?: string,
-) {
+async function start(render: IColourRender, plan: Plan, userId?: string) {
   render.chargedUserId = undefined;
   render.chargedTokens = undefined;
   render.chargeRef = undefined;
@@ -152,9 +249,7 @@ async function start(
 
   try {
     const task = await generateWithReferences({
-      images: [render.sourceUrl],
-      referenceLabels: ['The garment photograph to re-dye.'],
-      prompt: recolourGarmentPrompt(colour.label, colour.hex),
+      ...generation(render.sourceUrl, plan),
       preserveFrame: true,
       quality: env.openai.renderQuality,
       label: 'recolour (customer preview)',
@@ -182,7 +277,8 @@ export async function lookupColourRender(input: RecolourInput): Promise<Recolour
 }
 
 export async function recolourPhoto(input: RecolourInput, userId?: string): Promise<RecolourResponse> {
-  const { colour, key } = await resolve(input);
+  const plan = await resolve(input);
+  const { key, colour } = plan;
 
   const existing = await ColourRenderModel.findOne({ key }).exec();
   if (existing) {
@@ -203,7 +299,7 @@ export async function recolourPhoto(input: RecolourInput, userId?: string): Prom
     if (!claimed) return toResponse((await ColourRenderModel.findById(current._id).exec()) ?? current);
 
     try {
-      return toResponse(await start(claimed, colour, userId));
+      return toResponse(await start(claimed, plan, userId));
     } catch (error) {
       /* Not charged (no tokens / not signed in): leave it retryable. */
       claimed.status = 'failed';
@@ -218,8 +314,9 @@ export async function recolourPhoto(input: RecolourInput, userId?: string): Prom
     render = await ColourRenderModel.create({
       key,
       sourceUrl: input.imageUrl,
-      colourOptionId: colour.id,
-      hex: colour.hex,
+      colourOptionId: colour?.optionId,
+      hex: colour?.hex,
+      optionIds: plan.changes.map((c) => c.optionId),
       status: 'generating',
     });
   } catch (error) {
@@ -232,7 +329,7 @@ export async function recolourPhoto(input: RecolourInput, userId?: string): Prom
   }
 
   try {
-    return toResponse(await start(render, colour, userId));
+    return toResponse(await start(render, plan, userId));
   } catch (error) {
     /* Not charged: forget the row so the next request can start cleanly. */
     await ColourRenderModel.deleteOne({ _id: render._id }).exec();

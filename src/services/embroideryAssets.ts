@@ -6,6 +6,8 @@ import {
   EmbroiderySide,
   IEmbroideryAsset,
   defaultSide,
+  EmbroideryRegion,
+  REGION_GUIDE,
   placementFor,
 } from '@models/embroideryasset';
 import { ImageJobModel } from '@models/imagejob';
@@ -257,8 +259,17 @@ export async function updateAsset(id: string, data: Partial<IEmbroideryAsset>) {
  * as (if any). Lets the studio reopen a paid extraction whose pieces were
  * never saved — e.g. the page was reloaded before they were found.
  */
+/* Older extractions were mostly kept on the server's disk, which a redeploy
+   wipes; only recent ones are worth offering. */
+const EXTRACTION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function listExtractions(limit = 12) {
-  const jobs = await ImageJobModel.find({ stage: 'extract', status: 'completed', 'resultUrls.0': { $exists: true } })
+  const jobs = await ImageJobModel.find({
+    stage: 'extract',
+    status: 'completed',
+    'resultUrls.0': { $exists: true },
+    createdAt: { $gte: new Date(Date.now() - EXTRACTION_MAX_AGE_MS) },
+  })
     .sort({ createdAt: -1 })
     .limit(limit)
     .select('runId resultUrls createdAt')
@@ -286,14 +297,14 @@ export async function renameCollection(collectionId: string, collectionName: str
   if (!matchedCount) throw ApiError.notFound('Collection not found');
 }
 
-/** Deletes every piece in a collection. Images stay in Shopify Files. */
+/**
+ * Deletes every piece in a collection. Images stay in Shopify Files. An
+ * Embroidery option showing it in the designer is unlinked first, so the
+ * designer goes back to that option's own picture (or drops it from the
+ * list while other embroidery is linked).
+ */
 export async function deleteCollection(collectionId: string) {
-  const inUse = await OptionModel.find({ assetCollectionId: collectionId, isDeleted: false }).select('label').lean().exec();
-  if (inUse.length) {
-    throw ApiError.badRequest(
-      `The Embroidery option${inUse.length > 1 ? 's' : ''} ${inUse.map((o) => `"${o.label}"`).join(', ')} still use${inUse.length > 1 ? '' : 's'} this collection — unlink it first`,
-    );
-  }
+  await OptionModel.updateMany({ assetCollectionId: collectionId }, { $unset: { assetCollectionId: 1 } }).exec();
 
   const { deletedCount } = await EmbroideryAssetModel.deleteMany({ collectionId }).exec();
   if (!deletedCount) throw ApiError.notFound('Collection not found');
@@ -318,4 +329,57 @@ export async function deleteAsset(id: string) {
 
 export function getApprovedByIds(ids: string[]) {
   return EmbroideryAssetModel.find({ _id: { $in: ids }, isApproved: true }).exec();
+}
+
+/** What the designer shows and sends for an Embroidery option linked to a collection. */
+export interface CollectionLook {
+  /** The card picture and the AI preview's reference: the extracted sheet, else the first piece. */
+  cover: string;
+  /** Where each approved piece goes, in words, for the AI preview. */
+  layout: string;
+}
+
+const SIDE_WORDS: Record<EmbroiderySide, string> = {
+  pair: 'on both sides',
+  left: 'on the left',
+  right: 'on the right',
+  center: '',
+};
+
+/**
+ * The look of each collection, from its approved pieces only. The extracted
+ * sheet is the first picture AI Studio makes and shows the whole embroidery
+ * laid out like the garment, so it's the cover; a collection made from an
+ * uploaded image (no sheet kept) uses its first piece.
+ */
+export async function collectionLooks(collectionIds: string[]): Promise<Map<string, CollectionLook>> {
+  const looks = new Map<string, CollectionLook>();
+  const ids = [...new Set(collectionIds.filter(Boolean))];
+  if (!ids.length) return looks;
+
+  const pieces = await EmbroideryAssetModel.find({ collectionId: { $in: ids }, isApproved: true })
+    .sort({ createdAt: 1 })
+    .select('collectionId name region side workType assetUrl sourceJobId')
+    .lean()
+    .exec();
+  const jobIds = [...new Set(pieces.map((p) => p.sourceJobId?.toString()).filter(Boolean))];
+  const jobs = await ImageJobModel.find({ _id: { $in: jobIds } }).select('resultUrls').lean().exec();
+  const sheetOf = new Map(jobs.map((j) => [j._id.toString(), j.resultUrls?.[0]]));
+
+  for (const id of ids) {
+    const own = pieces.filter((p) => p.collectionId === id);
+    if (!own.length) continue;
+    const sheet = own.map((p) => p.sourceJobId && sheetOf.get(p.sourceJobId.toString())).find(Boolean);
+    const layout = own
+      .filter((p) => p.region !== 'back')
+      .map((p) => {
+        const where = [REGION_GUIDE[p.region as EmbroideryRegion].split(' — ')[0].toLowerCase(), SIDE_WORDS[p.side]]
+          .filter(Boolean)
+          .join(' ');
+        return `${p.name}${p.workType ? ` (${p.workType})` : ''} at the ${where}`;
+      })
+      .join('; ');
+    looks.set(id, { cover: sheet || own[0].assetUrl, layout });
+  }
+  return looks;
 }

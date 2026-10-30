@@ -14,6 +14,7 @@ import { ProductModel } from '@models/product';
 import { IOptionConfig } from '@models/optionconfig';
 import { ApiError } from '@utils/apiError';
 import * as measurementService from './measurement';
+import { collectionLooks } from './embroideryAssets';
 import {
   SelectionInput,
   calculatePrice,
@@ -103,6 +104,19 @@ export async function getDesignConfig(input: {
 
   const groups = await resolveConfigs(configs, current);
 
+  /* Embroidery made in AI Studio: once any Embroidery option is linked to a
+     saved embroidery, the step lists only the linked ones (plus "No
+     Embroidery"), each showing the embroidery's own picture. */
+  const looks = await collectionLooks(
+    groups.flatMap((g) => (g.group.code === 'embroidery' ? g.options.map((o) => o.assetCollectionId ?? '') : [])),
+  );
+  const optionsOf = (g: (typeof groups)[number]) => {
+    if (g.group.code !== 'embroidery') return g.options;
+    const linked = g.options.filter((o) => o.assetCollectionId && looks.has(o.assetCollectionId));
+    if (!linked.length) return g.options;
+    return g.options.filter((o) => linked.includes(o) || o.value.startsWith('no-'));
+  };
+
   return {
     garmentType: {
       _id: garmentType._id,
@@ -125,11 +139,13 @@ export async function getDesignConfig(input: {
       position: g.config.position,
       defaultOption: g.config.defaultOption ?? null,
       dependsOn: g.config.dependsOn ?? null,
-      options: g.options.map((o) => ({
+      options: optionsOf(g).map((o) => ({
         _id: o._id,
         label: o.label,
         value: o.value,
-        image: o.image,
+        image: (o.assetCollectionId && looks.get(o.assetCollectionId)?.cover) || o.image,
+        /* The picture above comes from AI Studio and wins over the Design Builder's. */
+        fromStudio: Boolean(o.assetCollectionId && looks.has(o.assetCollectionId)),
         hex: o.hex,
         priceModifier: o.priceModifier,
         /* Lets the stepper hide unpaired embroidery as soon as Neck is picked. */

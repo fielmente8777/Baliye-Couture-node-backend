@@ -115,19 +115,19 @@ export const env = {
     /** Generations running at once. Raise on higher OpenAI tiers. */
     concurrency: Number(process.env.OPENAI_IMAGE_CONCURRENCY || 2),
     /**
-     * Small text+vision model that names extracted embroidery pieces and
+     * Text+vision model (GPT-6 Astra) that names extracted embroidery pieces and
      * says where each sits (left shoulder, hem…). A fraction of a cent per
      * collection; if it fails, the free shape-based guess is used instead.
      */
-    visionModel: process.env.OPENAI_VISION_MODEL || "gpt-4.1-mini",
+    visionModel: process.env.OPENAI_VISION_MODEL || "gpt-6-astra",
     /**
      * Reads where every piece sits on the source photo, for "copy layout
      * from source". Needs real spatial accuracy, so a larger model than the
      * labeller; still one text call (a few cents) per layout.
      */
-    layoutModel: process.env.OPENAI_LAYOUT_MODEL || "gpt-4.1",
+    layoutModel: process.env.OPENAI_LAYOUT_MODEL || "gpt-6-astra",
     /** "Write with AI" in the admin content editor. A fraction of a cent per use. */
-    textModel: process.env.OPENAI_TEXT_MODEL || "gpt-4.1-mini",
+    textModel: process.env.OPENAI_TEXT_MODEL || "gpt-6-astra",
   },
 
   /**

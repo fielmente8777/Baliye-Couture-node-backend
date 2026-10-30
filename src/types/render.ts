@@ -18,10 +18,20 @@ export const renderKeyParamSchema = z.object({
 });
 
 export const recolourPhotoSchema = z.object({
-  body: z.object({
-    imageUrl: z.string().url().max(2048),
-    colourOptionId: objectId,
-  }),
+  body: z
+    .object({
+      imageUrl: z.string().url().max(2048),
+      /** Colour only (older clients). */
+      colourOptionId: objectId.optional(),
+      /** Every chosen option that should show in the picture, with its picture. */
+      options: z
+        .array(z.object({ optionId: objectId, imageUrl: z.string().url().max(2048).optional() }))
+        .max(12)
+        .optional(),
+    })
+    .refine((body) => body.colourOptionId || body.options?.length, {
+      message: 'Choose at least one option to show',
+    }),
 });
 
 export const createBaseGarmentSchema = z.object({

@@ -7,6 +7,8 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { ApiResponse } from "../utils/apiResponse";
 import { HttpStatus } from "../constants/httpstatus";
 import { pullDesignCatalog } from "../services/designCatalogSync";
+import { exportSubscribers, listSubscribers, removeSubscriber } from "../controllers/newsletter";
+import { subscriberIdParamSchema } from "../types/newsletter";
 
 import {
   catalogIdParamSchema,
@@ -542,5 +544,36 @@ adminRoutes.post("/catalog/import", sheetUpload.array("files", 2), catalogAdmin.
 adminRoutes.post("/content/write", validate(writeContentSchema), writeContent);
 adminRoutes.put("/content/:page", validate(saveContentSchema), saveContent);
 adminRoutes.post("/uploads", memoryUpload.single("file"), uploadImage);
+
+/* ---- Newsletter ---- */
+
+/**
+ * @openapi
+ * /admin/newsletter:
+ *   get:
+ *     summary: Newsletter subscribers, newest first
+ *     description: "`search` matches part of the email. Paged with `page` and `limit` (max 200)."
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Subscribers }
+ * /admin/newsletter/export:
+ *   get:
+ *     summary: Every subscriber as a CSV (email, source, signed_up)
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: CSV file }
+ * /admin/newsletter/{id}:
+ *   delete:
+ *     summary: Remove a subscriber
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Removed }
+ */
+adminRoutes.get("/newsletter", listSubscribers);
+adminRoutes.get("/newsletter/export", exportSubscribers);
+adminRoutes.delete("/newsletter/:id", validate(subscriberIdParamSchema), removeSubscriber);
 
 export default adminRoutes;

@@ -16,6 +16,7 @@ import wishlistRoutes from './wishlist';
 import contentRoutes from './content';
 import tokenRoutes from './tokens';
 import settingsRoutes from './settings';
+import newsletterRoutes from './newsletter';
 import { refreshDesignCatalogIfStale } from '../services/designCatalogSync';
 
 const router = Router();
@@ -43,5 +44,6 @@ router.use('/wishlist', wishlistRoutes);
 router.use('/content', contentRoutes);
 router.use('/tokens', tokenRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/newsletter', newsletterRoutes);
 
 export default router;
