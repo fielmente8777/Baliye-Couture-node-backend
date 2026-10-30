@@ -36,7 +36,8 @@ const RETRY_AFTER_MS = 2 * 60 * 1000;
 const STALE_AFTER_MS = 10 * 60 * 1000;
 
 /** Same idea as RECOLOUR_VERSION, for previews with more than a colour. */
-const RESTYLE_VERSION = 'r1';
+/* r2: AI Studio embroidery is copied from its sheet, not loosely referenced. */
+const RESTYLE_VERSION = 'r2';
 
 /** Option pictures sent along as references, at most. */
 const MAX_REFERENCES = 8;
@@ -144,13 +145,16 @@ async function resolveChanges(input: RecolourInput): Promise<Change[]> {
       code: group.code,
       group: group.label,
       label: option.label,
-      description: look
-        ? `this exact embroidery, every piece as shown in its reference image: ${look.layout}`
-        : option.description,
+      description: look ? `the exact embroidery on its sheet. Pieces: ${look.layout}` : option.description,
       hex,
       reference,
+      sheet: Boolean(look),
     });
   }
+
+  /* The embroidery sheet goes first, so it is never the reference dropped
+     for being over MAX_REFERENCES, and it is image 2. */
+  changes.sort((a, b) => Number(Boolean(b.sheet)) - Number(Boolean(a.sheet)));
 
   if (!changes.length) throw ApiError.badRequest('None of those options change the picture');
   return changes;
@@ -187,11 +191,15 @@ function generation(sourceUrl: string, plan: Plan) {
 
   const images = [sourceUrl];
   const referenceLabels = ['The garment photograph to edit.'];
-  const changes: RestyleChange[] = plan.changes.map(({ code, group, label, description, hex, reference }) => {
+  const changes: RestyleChange[] = plan.changes.map(({ code, group, label, description, hex, reference, sheet }) => {
     if (!reference || images.length > MAX_REFERENCES) return { code, group, label, description, hex };
     images.push(reference);
-    referenceLabels.push(`${group}: ${label} (reference only).`);
-    return { code, group, label, description, hex, imageIndex: images.length };
+    referenceLabels.push(
+      sheet
+        ? `Embroidery sheet for "${label}": the exact pieces to stitch onto the garment. Copy them exactly.`
+        : `${group}: ${label} (reference only).`,
+    );
+    return { code, group, label, description, hex, sheet, imageIndex: images.length };
   });
   return { images, referenceLabels, prompt: restyleGarmentPrompt(changes) };
 }

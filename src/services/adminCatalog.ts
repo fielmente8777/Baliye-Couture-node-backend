@@ -24,6 +24,7 @@ import { MeasurementTemplateModel } from '@models/measurementtemplate';
 import { ApiError } from '@utils/apiError';
 import { DESIGN_OPTION_TYPE, F, fetchEntries, ShopifyEntry } from './designCatalogSync';
 import { uploadImageToShopify } from './shopifyFiles';
+import { collectionLooks } from './embroideryAssets';
 
 export const slugify = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -148,7 +149,16 @@ export async function getCatalog() {
     }
   }
 
-  return { garments, groups, options, measurementTemplates, images, shopifyError };
+  /* Options linked to an AI Studio embroidery show its picture in the
+     designer, so the admin shows the same one (by option id). */
+  const looks = await collectionLooks(options.map((o) => o.assetCollectionId ?? ''));
+  const studioImages: Record<string, string> = {};
+  for (const o of options) {
+    const look = o.assetCollectionId ? looks.get(o.assetCollectionId) : undefined;
+    if (look) studioImages[o._id.toString()] = look.cover;
+  }
+
+  return { garments, groups, options, measurementTemplates, images, studioImages, shopifyError };
 }
 
 /* ---- Garments ----------------------------------------------------------- */

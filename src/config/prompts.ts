@@ -190,6 +190,8 @@ export interface RestyleChange {
   hex?: string;
   /** 1-based index of this option's picture among the input images. */
   imageIndex?: number;
+  /** The picture is an AI Studio embroidery sheet: copy it, don't interpret it. */
+  sheet?: boolean;
 }
 
 /** How to apply a choice from each kind of group; others get the generic rule. */
@@ -199,7 +201,29 @@ const RESTYLE_RULES: Record<string, string> = {
   fabric:
     "Fabric: make the cloth look like that fabric (texture, weave, drape, sheen and weight). Keep the garment's colour unless a colour is listed.",
   embroidery:
-    'Embroidery: replace the existing embroidery with that style, placed where it naturally sits on this garment (neckline, sleeves, hem, borders), stitched and realistic, not pasted on. When its reference image is a sheet of embroidery pieces on white, copy those exact motifs, colours and threads, and put each piece where it is listed (neckline, shoulders, cuffs, hem…), sized to this garment.',
+    'Embroidery: replace the existing embroidery with that style, placed where it naturally sits on this garment (neckline, sleeves, hem, borders), stitched and realistic, not pasted on.',
+};
+
+/**
+ * Embroidery from an AI Studio sheet. The loose "use as a reference for the
+ * look" wording let the model redesign the work, so previews came out with
+ * different motifs. This copies it: what the sheet's layout means, what to
+ * clear first, how each kind of piece goes on, and the negatives that stop it
+ * adding work the sheet doesn't have.
+ */
+const sheetEmbroideryRule = (imageIndex?: number) => {
+  const sheet = imageIndex ? `image ${imageIndex}` : 'the embroidery sheet';
+  return [
+    `Embroidery: ${sheet} is a flat sheet of the EXACT embroidery pieces on white. It is a copy job, not a design job.`,
+    'The sheet is laid out like the garment seen from the front: top centre = neckline and yoke; top corners = shoulders; far left and right edges = sleeves and cuffs; middle = chest and waist; long strips along the bottom = hem borders. A piece shown once on the left that is listed for both sides goes on both sides, mirrored.',
+    'Do it in this order:',
+    '1. Remove every existing embroidery, print, lace and trim from the garment in image 1 so the fabric is plain.',
+    '2. Put each listed piece in its listed place, and only there. Copy each one faithfully: same motif shapes and outlines, same number and spacing of repeats, same thread and stone colours, same metallic or matt finish, same bead, sequin and mirror placement. A motif must still be recognisable as the same motif side by side with the sheet.',
+    '3. Borders run along their edge: a neckline border follows the full neck curve, a cuff border wraps the visible width of the cuff, a hem border spans the whole visible hem. Keep each border one continuous band at a width in proportion to the garment, as on the sheet (a thin border stays thin).',
+    '4. Butis repeat only in the area listed, at the sheet spacing; do not scatter them elsewhere.',
+    '5. Add NOTHING that is not on the sheet: no extra motifs, borders, fill, gold or colours. Do not make it denser, larger, more ornate or more symmetrical than the sheet.',
+    '6. It must look stitched into the cloth: follows the folds and drape, takes the photo\'s light and shadow, with slight thread and bead relief. Not a flat sticker.',
+  ].join('\n');
 };
 
 /**
@@ -214,10 +238,12 @@ export const restyleGarmentPrompt = (changes: RestyleChange[]) => {
     const image = c.imageIndex ? ` (see image ${c.imageIndex})` : '';
     return `- ${c.group}: ${c.label}${hex}${description}${image}.`;
   });
+  const sheet = changes.find((c) => c.sheet);
   const codes = new Set(changes.map((c) => c.code));
   const rules = Object.entries(RESTYLE_RULES)
-    .filter(([code]) => codes.has(code))
+    .filter(([code]) => codes.has(code) && !(sheet && code === 'embroidery'))
     .map(([, rule]) => rule);
+  if (sheet) rules.push(sheetEmbroideryRule(sheet.imageIndex));
   if (changes.some((c) => !RESTYLE_RULES[c.code])) {
     rules.push(
       'Neck, sleeve, length, cuff, lower and similar: reshape only that part of the garment to match the choice; the rest of the garment stays as it is.',
@@ -228,8 +254,10 @@ export const restyleGarmentPrompt = (changes: RestyleChange[]) => {
     'Image 1 is a studio product photograph of a garment on a mannequin.',
     "Edit it so the garment shows the customer's choices below, and change nothing else:",
     lines.join('\n'),
-    rules.join(' '),
-    'Any further images are pictures of the chosen options (swatches or illustrations) — use them only as a reference for the look; do not paste them into the photo.',
+    rules.join('\n'),
+    sheet
+      ? 'Other further images are pictures of the chosen options (swatches or illustrations): use them only as a reference for the look; do not paste them into the photo. The embroidery sheet is the exception: copy its motifs exactly as described above.'
+      : 'Any further images are pictures of the chosen options (swatches or illustrations) — use them only as a reference for the look; do not paste them into the photo.',
     'Keep the mannequin, stand, pose, background, lighting, camera angle and framing of image 1 exactly. Photorealistic. No text, logos or watermarks.',
   ].join('\n');
 };
@@ -253,9 +281,14 @@ export const blendCompositePrompt = (extra?: string, pieces?: string[]) =>
     "garment's lighting and shadow, give the thread and beadwork real relief and",
     'texture, and follow the drape, folds and curvature of the cloth beneath it.',
     'Do NOT move any embroidery. Do NOT resize it. Do NOT add or remove motifs.',
-    'Do NOT change the embroidery colours. Do NOT change the garment colour,',
-    'cut, neckline shape or pose.',
-    'Keep every motif exactly where it already is.',
+    'Do NOT redraw, restyle, simplify, sharpen into a new pattern or "improve"',
+    'any motif: every outline, repeat, bead, sequin and stone stays where it is',
+    'and the same count. Keep fine detail; do not blur it into texture.',
+    'Do NOT change the embroidery colours: gold stays gold, silver stays silver,',
+    'thread colours stay the same, and nothing becomes gold that is not.',
+    'Do NOT change the garment colour, cut, neckline shape or pose.',
+    'Where a border crosses a fold or seam, bend it with the cloth; do not break',
+    'it or shift it. Keep every motif exactly where it already is.',
     extra ?? '',
     'Studio product photograph, plain neutral background, full garment in frame.',
   ]

@@ -340,10 +340,10 @@ export interface CollectionLook {
 }
 
 const SIDE_WORDS: Record<EmbroiderySide, string> = {
-  pair: 'on both sides',
-  left: 'on the left',
-  right: 'on the right',
-  center: '',
+  pair: 'on BOTH sides, mirrored (one copy on the left, one on the right)',
+  left: 'on the left side only (image-left)',
+  right: 'on the right side only (image-right)',
+  center: 'centred',
 };
 
 /**
@@ -359,7 +359,7 @@ export async function collectionLooks(collectionIds: string[]): Promise<Map<stri
 
   const pieces = await EmbroideryAssetModel.find({ collectionId: { $in: ids }, isApproved: true })
     .sort({ createdAt: 1 })
-    .select('collectionId name region side workType assetUrl sourceJobId')
+    .select('collectionId name region side workType description assetUrl sourceJobId')
     .lean()
     .exec();
   const jobIds = [...new Set(pieces.map((p) => p.sourceJobId?.toString()).filter(Boolean))];
@@ -370,13 +370,15 @@ export async function collectionLooks(collectionIds: string[]): Promise<Map<stri
     const own = pieces.filter((p) => p.collectionId === id);
     if (!own.length) continue;
     const sheet = own.map((p) => p.sourceJobId && sheetOf.get(p.sourceJobId.toString())).find(Boolean);
+    /* One numbered line per piece: what it is, what it's made of, and the
+       full region wording ("the border that follows the neck opening"), which
+       places it far better than the region name alone. */
     const layout = own
       .filter((p) => p.region !== 'back')
-      .map((p) => {
-        const where = [REGION_GUIDE[p.region as EmbroideryRegion].split(' — ')[0].toLowerCase(), SIDE_WORDS[p.side]]
-          .filter(Boolean)
-          .join(' ');
-        return `${p.name}${p.workType ? ` (${p.workType})` : ''} at the ${where}`;
+      .map((p, i) => {
+        const [region, detail] = REGION_GUIDE[p.region as EmbroideryRegion].split(' — ');
+        const made = [p.workType, p.description].filter(Boolean).join(', ');
+        return `(${i + 1}) ${p.name}${made ? ` [${made}]` : ''}: ${region.toLowerCase()}${detail ? `, ${detail}` : ''}, ${SIDE_WORDS[p.side]}`;
       })
       .join('; ');
     looks.set(id, { cover: sheet || own[0].assetUrl, layout });
