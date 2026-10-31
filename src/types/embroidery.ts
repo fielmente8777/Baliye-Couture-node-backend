@@ -17,9 +17,12 @@ export const buildAssetsSchema = z.object({
       collectionId: z.string().min(1).max(40).optional(),
       /** Small garment photos so the labeller can see where each piece sits. */
       references: z
-        .array(z.object({ image: z.string().min(100), label: z.string().max(80).optional() }))
+        .array(z.object({ image: z.string().min(100), label: z.string().max(240).optional() }))
         .max(4)
         .optional(),
+      /** A new embroidery's necklines (Neck Type option ids) and notes. */
+      neckOptionIds: z.array(objectId).max(30).optional(),
+      notes: z.string().max(1500).optional(),
       /** Enables the colour-drift check against the source garment's ink. */
       sourceInkHex: hex.optional(),
     })
@@ -63,9 +66,17 @@ export const collectionParamSchema = z.object({
   params: z.object({ collectionId: z.string().min(1).max(40) }),
 });
 
+/** Edit an embroidery: its name, necklines and notes, any of them. */
 export const renameCollectionSchema = z.object({
   params: z.object({ collectionId: z.string().min(1).max(40) }),
-  body: z.object({ collectionName: z.string().trim().min(1).max(120) }),
+  body: z
+    .object({
+      collectionName: z.string().trim().min(1).max(120).optional(),
+      /** Neck Type options it suits; [] = every neckline. */
+      neckOptionIds: z.array(objectId).max(30).optional(),
+      notes: z.string().max(1500).optional(),
+    })
+    .refine((b) => Object.values(b).some((v) => v !== undefined), 'Nothing to change'),
 });
 
 export const approveAssetSchema = z.object({

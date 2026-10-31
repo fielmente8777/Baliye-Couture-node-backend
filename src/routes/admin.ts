@@ -9,6 +9,8 @@ import { HttpStatus } from "../constants/httpstatus";
 import { pullDesignCatalog } from "../services/designCatalogSync";
 import { exportSubscribers, listSubscribers, removeSubscriber } from "../controllers/newsletter";
 import { subscriberIdParamSchema } from "../types/newsletter";
+import { addMember, getTeam, removeMember, requireOwner, updateMember } from "../controllers/team";
+import { addMemberSchema, memberParamSchema, updateMemberSchema } from "../types/team";
 
 import {
   catalogIdParamSchema,
@@ -119,6 +121,12 @@ adminRoutes.use("/ai", aiRoutes);
  */
 adminRoutes.get("/me", getAdminProfile);
 adminRoutes.put("/me", updateAdminProfile);
+
+/* Team members: extra admin logins the owner adds (Admin -> Team). Owners only. */
+adminRoutes.get("/team", requireOwner, getTeam);
+adminRoutes.post("/team", requireOwner, validate(addMemberSchema), addMember);
+adminRoutes.patch("/team/:id", requireOwner, validate(updateMemberSchema), updateMember);
+adminRoutes.delete("/team/:id", requireOwner, validate(memberParamSchema), removeMember);
 
 /**
  * @openapi

@@ -17,7 +17,9 @@ export const getAdminProfile = asyncHandler(async (req: Request, res: Response) 
 
 export const updateAdminProfile = asyncHandler(async (req: Request, res: Response) => {
   if (!req.authUser) throw ApiError.unauthorized();
-  const { password, ...rest } = req.body;
+  /* Role, on/off and who added them are the owner's to set (Admin → Team), never the admin's own. */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { password, role, isActive, addedBy, passwordHash, ...rest } = req.body ?? {};
   const updates: Record<string, unknown> = { ...rest };
 
   if (password) {

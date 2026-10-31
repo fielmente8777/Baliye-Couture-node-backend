@@ -2,6 +2,8 @@ import { NextFunction, Request, Response } from 'express';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ApiError } from '../utils/apiError';
 import { verifyAccessToken } from '../utils/jwt';
+import { Role } from '../constants/role';
+import { isAdminActive } from '../services/team';
 
 export const authenticate = asyncHandler(async (req: Request, _res: Response, next: NextFunction) => {
   const header = req.headers.authorization;
@@ -11,13 +13,21 @@ export const authenticate = asyncHandler(async (req: Request, _res: Response, ne
 
   const token = header.split(' ')[1];
 
+  let payload;
   try {
-    const payload = verifyAccessToken(token);
-    req.authUser = { id: payload.sub, role: payload.role };
-    next();
+    payload = verifyAccessToken(token);
   } catch {
     throw ApiError.unauthorized('Invalid or expired access token');
   }
+
+  /* A team member who was switched off or removed is out at once, not when
+     their 15-minute token runs out. */
+  if (payload.role === Role.ADMIN && !(await isAdminActive(payload.sub))) {
+    throw ApiError.unauthorized('This admin account is switched off or was removed');
+  }
+
+  req.authUser = { id: payload.sub, role: payload.role };
+  next();
 });
 
 /**

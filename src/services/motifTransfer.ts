@@ -31,7 +31,7 @@ import {
 import { IEmbroideryAsset } from '@models/embroideryasset';
 import { ImageJobModel, IImageJob } from "@models/imagejob";
 import { ApiError } from "@utils/apiError";
-import { getApprovedByIds } from './embroideryAssets';
+import { collectionNotes, getApprovedByIds } from './embroideryAssets';
 import { CompositeResult, compositeEmbroidery, compositeFromPlan, describePieces } from './embroideryCompositor';
 import { PlannedPiece, planFromReference } from './referenceLayout';
 import { Landmarks } from './garmentLandmarks';
@@ -73,6 +73,8 @@ export async function extractMotifs(
   adminId?: string,
   runId = randomUUID(),
   region?: MotifRegion,
+  /** The admin's notes on the embroidery: what is there and what it is made of. */
+  notes?: string,
 ) {
   if (views.length === 0) {
     throw ApiError.badRequest("Upload at least one photograph of the garment");
@@ -85,12 +87,17 @@ export async function extractMotifs(
 
   /* A single cropped region gets the tighter single-piece prompt; several
      angles get the multi-view one that de-duplicates repeated borders. */
-  const prompt =
+  const base =
     labelled.length === 1
       ? region
         ? extractRegionPrompt(region)
         : EXTRACT_MOTIFS_PROMPT
       : extractFromViewsPrompt(labelled.map((view) => ({ label: view.label })));
+  /* The expert's notes help it find every element and keep true colours; they
+     never license adding what the photos don't show. */
+  const prompt = notes?.trim()
+    ? `${base} Notes from the embroidery expert about this garment: "${notes.trim()}". Use them to recognise every element and its true colours and materials; never add anything the photographs do not show.`
+    : base;
 
   const task = await generateWithReferences({
     images: labelled.map((view) => view.image),
@@ -322,7 +329,13 @@ export async function applyAssets(
   const { composite, plan } = await layoutFor(portrait, assets, assetIds, options);
 
   const runId = options.runId ?? randomUUID();
-  const prompt = blendCompositePrompt(options.extra, describePieces(assets));
+  /* The admin's notes say what the work is made of (zari reads as metal,
+     resham as thread): they shape the blend, never the placement. */
+  const notes = await collectionNotes(assets[0].collectionId);
+  const prompt = blendCompositePrompt(options.extra, [
+    ...(notes ? [`Expert notes on this embroidery: ${notes}.`] : []),
+    ...describePieces(assets),
+  ]);
   const variations = Math.min(Math.max(options.variations ?? 1, 1), 4);
   const layout = composite.buffer.toString('base64');
 

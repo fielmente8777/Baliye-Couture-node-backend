@@ -39,6 +39,19 @@ interface LabelInput {
   /** Small copies of the source garment photos, base64. Optional. */
   references?: { image: string; label?: string }[];
   collectionName: string;
+  /** The admin's notes on this embroidery: technique, colours, where it sits. */
+  notes?: string;
+  /** Past corrections the admin made to AI labels: the AI learns their conventions. */
+  lessons?: { before: LessonText; after: LessonText }[];
+}
+
+type LessonText = { name?: string; region?: string; side?: string; workType?: string; description?: string };
+
+/** One correction as a line: what the AI said, then what the admin set. */
+function lessonLine({ before, after }: NonNullable<LabelInput['lessons']>[number]) {
+  const show = (l: LessonText) =>
+    `"${l.name ?? '?'}" (${[l.region, l.side, l.workType].filter(Boolean).join(', ')})`;
+  return `- AI said ${show(before)} → expert corrected to ${show(after)}${after.description ? `: ${after.description}` : ''}`;
 }
 
 const SHEET_WIDTH = 1024;
@@ -68,10 +81,24 @@ async function annotate(sheet: Buffer, boxes: LabelInput['boxes']) {
 const asDataUrl = (base64: string, mime = 'image/jpeg') =>
   base64.startsWith('data:') ? base64 : `data:${mime};base64,${base64}`;
 
-function instructions(count: number, collectionName: string, references: LabelInput['references']) {
+function instructions(
+  count: number,
+  collectionName: string,
+  references: LabelInput['references'],
+  notes?: string,
+  lessons: NonNullable<LabelInput['lessons']> = [],
+) {
   return [
     `You are labelling ${count} embroidery pieces cut from ONE Indian ethnic garment (suit, kurti or anarkali).`,
     `The admin calls this embroidery "${collectionName}".`,
+    notes ? `The embroidery expert describes it as: "${notes}". Trust this over your own guess.` : '',
+    lessons.length
+      ? [
+          'Corrections the embroidery expert made to earlier AI labels. Follow the same naming, work types and',
+          'positions for similar pieces:',
+          ...lessons.map(lessonLine),
+        ].join('\n')
+      : '',
     'The FIRST image is a sheet of the extracted embroidery on white, every piece outlined in red and numbered.',
     'The sheet was laid out to mirror the garment seen from the front: neck pieces at the top, the left side of',
     'the garment (as seen in the photo) on the left, the right side on the right, borders along the bottom.',
@@ -94,7 +121,9 @@ function instructions(count: number, collectionName: string, references: LabelIn
     '',
     'Reply with JSON only, in this exact shape, one entry per number in order:',
     '{"pieces":[{"n":1,"region":"neckline","side":"center","name":"…","workType":"…","description":"…"}]}',
-  ].join('\n');
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 export async function labelPieces(input: LabelInput): Promise<(PieceLabel | null)[] | null> {
@@ -105,7 +134,7 @@ export async function labelPieces(input: LabelInput): Promise<(PieceLabel | null
     const references = (input.references ?? []).slice(0, 4);
 
     const content = [
-      { type: 'text', text: instructions(input.boxes.length, input.collectionName, references) },
+      { type: 'text', text: instructions(input.boxes.length, input.collectionName, references, input.notes, input.lessons) },
       { type: 'image_url', image_url: { url: asDataUrl(sheet.toString('base64')), detail: 'high' } },
       ...references.map((ref) => ({
         type: 'image_url',

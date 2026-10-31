@@ -15,13 +15,16 @@ export const extractMotifsSchema = z.object({
         .array(
           z.object({
             image: base64Image,
-            /** "front", "left sleeve", "hem detail". */
-            label: z.string().max(80).optional(),
+            /** "front", "left sleeve", "hem detail", or the admin's own words for an extra close-up. */
+            label: z.string().max(240).optional(),
           }),
         )
         .min(1)
-        .max(8)
+        .max(12)
         .optional(),
+
+      /** The admin's notes on the embroidery: technique, colours, what to keep. */
+      notes: z.string().max(1500).optional(),
 
       /** Single-image form, kept so existing callers keep working. */
       donorImage: base64Image.optional(),

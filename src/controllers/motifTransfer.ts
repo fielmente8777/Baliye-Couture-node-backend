@@ -16,6 +16,7 @@ export const extractMotifs = asyncHandler(async (req: Request, res: Response) =>
     req.authUser?.id,
     req.body.runId,
     req.body.region,
+    req.body.notes,
   );
 
   /* 202: queued, not finished. */

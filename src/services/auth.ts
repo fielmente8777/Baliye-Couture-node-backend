@@ -14,6 +14,7 @@ import { ApiError } from "@utils/apiError";
 import { syncCustomerInBackground } from './shopifyCustomer';
 import { fetchCustomer } from '@config/shopifyAuth';
 import { Role } from "@constants/role";
+import { isAdminActive } from "@services/team";
 import { env } from "@config/env";
 import { sendWhatsAppOtp } from "./whatsapp";
 
@@ -280,6 +281,11 @@ export async function refreshTokens(refreshToken: string) {
     throw ApiError.unauthorized("Refresh token has been revoked or expired");
 
   await refreshTokenRepository.revoke(refreshToken);
+
+  /* A removed or switched-off team member can't stay signed in by refreshing. */
+  if (payload.role === Role.ADMIN && !(await isAdminActive(payload.sub))) {
+    throw ApiError.unauthorized("This admin account is switched off or was removed");
+  }
 
   return issueTokens(payload.sub, payload.role);
 }

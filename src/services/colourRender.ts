@@ -145,7 +145,9 @@ async function resolveChanges(input: RecolourInput): Promise<Change[]> {
       code: group.code,
       group: group.label,
       label: option.label,
-      description: look ? `the exact embroidery on its sheet. Pieces: ${look.layout}` : option.description,
+      description: look
+        ? `the exact embroidery on its sheet.${look.notes ? ` Expert notes: ${look.notes}.` : ''} Pieces: ${look.layout}`
+        : option.description,
       hex,
       reference,
       sheet: Boolean(look),

@@ -10,8 +10,12 @@ import {
   REGION_GUIDE,
   placementFor,
 } from '@models/embroideryasset';
+import { EmbroideryCollectionModel } from '@models/embroiderycollection';
+import { EmbroideryLessonModel, LessonLabel } from '@models/embroiderylesson';
 import { ImageJobModel } from '@models/imagejob';
 import { OptionModel } from '@models/option';
+import { OptionGroupModel } from '@models/optiongroup';
+import { Types } from 'mongoose';
 import { ApiError } from '@utils/apiError';
 import { logger } from '@config/logger';
 import { splitSheet } from './sheetSplitter';
@@ -59,6 +63,9 @@ export interface BuildAssetsInput {
   collectionId?: string;
   /** Small copies of the garment photos, so the labeller sees where each piece sits. */
   references?: { image: string; label?: string }[];
+  /** A new collection's necklines and notes, saved with it. */
+  neckOptionIds?: string[];
+  notes?: string;
   /**
    * Ink colour of the source garment's embroidery, if known. Supplying it
    * turns on the drift check — the extraction models reliably shift silver and
@@ -108,12 +115,19 @@ export async function buildAssetsFromJob(
   }
 
   /* The vision model's names and positions win; the splitter's shape-based
-     guess fills in for any piece it could not label. */
+     guess fills in for any piece it could not label. It is given the admin's
+     notes and their past corrections, so it names things their way. */
+  const [notes, lessons] = await Promise.all([
+    input.collectionId ? collectionNotes(input.collectionId) : Promise.resolve(input.notes?.trim()),
+    recentLessons(),
+  ]);
   const labels = await labelPieces({
     sheet,
     boxes: pieces.map((p) => p.sheetBox),
     references: input.references,
     collectionName: input.collectionName,
+    notes,
+    lessons,
   });
 
   /* Adding to an existing collection keeps its id and name, so the new piece
@@ -124,6 +138,8 @@ export async function buildAssetsFromJob(
     if (!existing) throw ApiError.notFound('That embroidery collection no longer exists');
     collectionId = input.collectionId;
     input.collectionName = existing.collectionName;
+  } else if (input.neckOptionIds?.length || input.notes?.trim()) {
+    await saveCollectionDetails(collectionId, { neckOptionIds: input.neckOptionIds, notes: input.notes });
   }
   const assets: IEmbroideryAsset[] = [];
 
@@ -214,7 +230,128 @@ export function listCollections() {
     },
     { $sort: { createdAt: -1 } },
     { $limit: 50 },
+    /* Its necklines and notes, when the admin set any. */
+    {
+      $lookup: {
+        from: EmbroideryCollectionModel.collection.name,
+        localField: '_id',
+        foreignField: 'collectionId',
+        as: 'details',
+      },
+    },
+    {
+      $addFields: {
+        neckOptionIds: { $ifNull: [{ $first: '$details.neckOptionIds' }, []] },
+        notes: { $ifNull: [{ $first: '$details.notes' }, ''] },
+      },
+    },
+    { $project: { details: 0 } },
   ]).exec();
+}
+
+/* ---- Embroidery details: necklines and notes --------------------------- */
+
+export async function collectionNotes(collectionId: string) {
+  const details = await EmbroideryCollectionModel.findOne({ collectionId }).select('notes').lean().exec();
+  return details?.notes?.trim() || undefined;
+}
+
+/** Every Neck Type option id, so neck pairing can be told apart from the admin's other pairings. */
+async function neckOptionIdsAll() {
+  const neck = await OptionGroupModel.findOne({ code: 'neck' }).select('_id').lean().exec();
+  if (!neck) return new Set<string>();
+  const options = await OptionModel.find({ groupId: neck._id }).select('_id').lean().exec();
+  return new Set(options.map((o) => o._id.toString()));
+}
+
+/**
+ * Makes an Embroidery option's neck pairing match its AI Studio embroidery:
+ * the option is then offered only with those necklines, by the same rule the
+ * Design Builder's "Only offer with" uses (server and stepper both read
+ * `pairsWith`). Pairings with other steps are left alone. While linked, the
+ * studio owns the neck part; `collectionId` null clears it (on unlink).
+ */
+export async function syncNeckPairing(optionId: string, collectionId: string | null) {
+  const option = await OptionModel.findById(optionId).exec();
+  if (!option) return;
+  const necks = await neckOptionIdsAll();
+  const details = collectionId
+    ? await EmbroideryCollectionModel.findOne({ collectionId }).select('neckOptionIds').lean().exec()
+    : null;
+  const keep = (option.pairsWith ?? []).filter((id) => !necks.has(id.toString()));
+  const wanted = (details?.neckOptionIds ?? []).filter((id) => necks.has(id.toString()));
+  option.pairsWith = [...keep, ...wanted];
+  await option.save();
+}
+
+/** Saves a collection's necklines and/or notes, and re-pairs the option showing it. */
+export async function saveCollectionDetails(
+  collectionId: string,
+  data: { neckOptionIds?: string[]; notes?: string },
+) {
+  const set: Record<string, unknown> = {};
+  if (data.neckOptionIds) {
+    const necks = await neckOptionIdsAll();
+    const unknown = data.neckOptionIds.filter((id) => !necks.has(id));
+    if (unknown.length) throw ApiError.badRequest('Pick necklines from the Neck Type step only');
+    set.neckOptionIds = data.neckOptionIds.map((id) => new Types.ObjectId(id));
+  }
+  if (data.notes !== undefined) set.notes = data.notes.trim();
+  if (!Object.keys(set).length) return;
+
+  await EmbroideryCollectionModel.updateOne({ collectionId }, { $set: set }, { upsert: true }).exec();
+
+  if (data.neckOptionIds) {
+    const linked = await OptionModel.find({ assetCollectionId: collectionId }).select('_id').lean().exec();
+    for (const o of linked) await syncNeckPairing(o._id.toString(), collectionId);
+  }
+}
+
+/** Edit from AI Studio: name, necklines and notes, any of them. */
+export async function updateCollection(
+  collectionId: string,
+  data: { collectionName?: string; neckOptionIds?: string[]; notes?: string },
+) {
+  const exists = await EmbroideryAssetModel.exists({ collectionId });
+  if (!exists) throw ApiError.notFound('Collection not found');
+  if (data.collectionName) await renameCollection(collectionId, data.collectionName);
+  await saveCollectionDetails(collectionId, data);
+}
+
+/* ---- Learning from the admin's corrections ----------------------------- */
+
+const LESSON_FIELDS = ['name', 'region', 'side', 'workType', 'description'] as const;
+
+/**
+ * Remembers what the admin changed on a piece the AI named. The first AI
+ * answer is kept as `before`; `after` follows every later edit. Pieces the
+ * admin added by hand (not AI-named) teach nothing.
+ */
+async function recordLesson(previous: IEmbroideryAsset, updated: IEmbroideryAsset) {
+  if (!previous.aiLabelled) return;
+  const changed = LESSON_FIELDS.some((f) => (previous[f] ?? '') !== (updated[f] ?? ''));
+  if (!changed) return;
+
+  const pick = (a: IEmbroideryAsset): LessonLabel =>
+    Object.fromEntries(LESSON_FIELDS.map((f) => [f, a[f] ?? undefined])) as LessonLabel;
+
+  await EmbroideryLessonModel.updateOne(
+    { assetId: previous._id },
+    {
+      $setOnInsert: { before: pick(previous), collectionId: previous.collectionId },
+      $set: { after: pick(updated), collectionName: updated.collectionName },
+    },
+    { upsert: true },
+  ).exec();
+}
+
+/** The latest corrections, for the labelling AI. Ones that changed nothing in the end are skipped. */
+export async function recentLessons(limit = 15) {
+  const rows = await EmbroideryLessonModel.find().sort({ updatedAt: -1 }).limit(limit * 2).lean().exec();
+  return rows
+    .filter((r) => LESSON_FIELDS.some((f) => (r.before?.[f] ?? '') !== (r.after?.[f] ?? '')))
+    .slice(0, limit)
+    .map((r) => ({ before: r.before, after: r.after }));
 }
 
 export function listAssets(collectionId?: string, approvedOnly = false) {
@@ -251,6 +388,8 @@ export async function updateAsset(id: string, data: Partial<IEmbroideryAsset>) {
   }).exec();
 
   if (!asset) throw ApiError.notFound('Asset not found');
+  /* A lesson failing to save must never block the admin's edit. */
+  await recordLesson(current, asset).catch((err) => logger.warn({ err }, 'Could not record embroidery lesson'));
   return asset;
 }
 
@@ -304,10 +443,14 @@ export async function renameCollection(collectionId: string, collectionName: str
  * list while other embroidery is linked).
  */
 export async function deleteCollection(collectionId: string) {
+  /* Its neck pairing goes with it, so the option isn't left neck-limited. */
+  const linked = await OptionModel.find({ assetCollectionId: collectionId }).select('_id').lean().exec();
+  for (const o of linked) await syncNeckPairing(o._id.toString(), null);
   await OptionModel.updateMany({ assetCollectionId: collectionId }, { $unset: { assetCollectionId: 1 } }).exec();
 
   const { deletedCount } = await EmbroideryAssetModel.deleteMany({ collectionId }).exec();
   if (!deletedCount) throw ApiError.notFound('Collection not found');
+  await EmbroideryCollectionModel.deleteOne({ collectionId }).exec();
 }
 
 export async function setApproval(id: string, isApproved: boolean) {
@@ -337,6 +480,8 @@ export interface CollectionLook {
   cover: string;
   /** Where each approved piece goes, in words, for the AI preview. */
   layout: string;
+  /** The admin's notes on the whole embroidery, if any. */
+  notes?: string;
 }
 
 const SIDE_WORDS: Record<EmbroiderySide, string> = {
@@ -365,6 +510,8 @@ export async function collectionLooks(collectionIds: string[]): Promise<Map<stri
   const jobIds = [...new Set(pieces.map((p) => p.sourceJobId?.toString()).filter(Boolean))];
   const jobs = await ImageJobModel.find({ _id: { $in: jobIds } }).select('resultUrls').lean().exec();
   const sheetOf = new Map(jobs.map((j) => [j._id.toString(), j.resultUrls?.[0]]));
+  const details = await EmbroideryCollectionModel.find({ collectionId: { $in: ids } }).select('collectionId notes').lean().exec();
+  const notesOf = new Map(details.map((d) => [d.collectionId, d.notes?.trim() || undefined]));
 
   for (const id of ids) {
     const own = pieces.filter((p) => p.collectionId === id);
@@ -381,7 +528,7 @@ export async function collectionLooks(collectionIds: string[]): Promise<Map<stri
         return `(${i + 1}) ${p.name}${made ? ` [${made}]` : ''}: ${region.toLowerCase()}${detail ? `, ${detail}` : ''}, ${SIDE_WORDS[p.side]}`;
       })
       .join('; ');
-    looks.set(id, { cover: sheet || own[0].assetUrl, layout });
+    looks.set(id, { cover: sheet || own[0].assetUrl, layout, notes: notesOf.get(id) });
   }
   return looks;
 }

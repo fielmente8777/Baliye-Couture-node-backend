@@ -23,6 +23,7 @@ import { ACCEPTABLE_CONFIDENCE, Landmarks, detectLandmarks } from './garmentLand
 /** AI Studio embroidery on customer previews. Off: studio is admin testing only for now. */
 const STUDIO_EMBROIDERY_ON_WEBSITE = false;
 import { refreshJob } from './motifTransfer';
+import { syncNeckPairing } from './embroideryAssets';
 
 /**
  * Customer design images, built in this order:
@@ -163,7 +164,9 @@ export async function setEmbroideryCollection(optionId: string, collectionId: st
   ).exec();
 
   if (!option) throw ApiError.notFound('Option not found');
-  return option;
+  /* The embroidery's necklines become the option's neck pairing (cleared on unlink). */
+  await syncNeckPairing(optionId, collectionId);
+  return OptionModel.findById(optionId).exec();
 }
 
 /* ------------------------------------------------------------------ */

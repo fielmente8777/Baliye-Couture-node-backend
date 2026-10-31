@@ -32,8 +32,8 @@ export const getExtractions = asyncHandler(async (_req: Request, res: Response) 
 });
 
 export const renameCollection = asyncHandler(async (req: Request, res: Response) => {
-  await assetService.renameCollection(req.params.collectionId, req.body.collectionName);
-  ApiResponse.success(res, HttpStatus.OK, 'Collection renamed');
+  await assetService.updateCollection(req.params.collectionId, req.body);
+  ApiResponse.success(res, HttpStatus.OK, 'Collection updated');
 });
 
 export const removeCollection = asyncHandler(async (req: Request, res: Response) => {

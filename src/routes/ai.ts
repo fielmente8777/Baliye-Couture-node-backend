@@ -203,6 +203,7 @@ aiRoutes.post("/assets/build", validate(buildAssetsSchema), buildAssets);
 aiRoutes.get("/assets/collections", getCollections);
 /* Finished extractions + what each was saved as, so an unsaved one can be reopened. */
 aiRoutes.get("/extractions", getExtractions);
+/* Name, necklines (→ the linked option's neck pairing) and notes for the AI. */
 aiRoutes.patch("/assets/collections/:collectionId", validate(renameCollectionSchema), renameCollection);
 aiRoutes.delete("/assets/collections/:collectionId", validate(collectionParamSchema), removeCollection);
 
