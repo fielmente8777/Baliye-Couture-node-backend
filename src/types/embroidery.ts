@@ -5,6 +5,17 @@ import { EMBROIDERY_REGIONS, EMBROIDERY_SIDES } from '../models/embroideryasset'
 const objectId = z.string().length(24);
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a #rrggbb colour');
 
+/** What an embroidery goes with: option ids from each designer step. */
+const optionIds = z.array(objectId).max(30).optional();
+const pairingFields = {
+  neckOptionIds: optionIds,
+  sleeveOptionIds: optionIds,
+  lengthOptionIds: optionIds,
+  lowerOptionIds: optionIds,
+  dupattaOptionIds: optionIds,
+  colourOptionIds: optionIds,
+};
+
 export const buildAssetsSchema = z.object({
   body: z
     .object({
@@ -20,8 +31,12 @@ export const buildAssetsSchema = z.object({
         .array(z.object({ image: z.string().min(100), label: z.string().max(240).optional() }))
         .max(4)
         .optional(),
-      /** A new embroidery's necklines (Neck Type option ids) and notes. */
-      neckOptionIds: z.array(objectId).max(30).optional(),
+      /**
+       * A new embroidery's details: the neck, sleeve and length or lower it is
+       * made for (required, checked in the service), dupatta and colour
+       * (optional), and notes.
+       */
+      ...pairingFields,
       notes: z.string().max(1500).optional(),
       /** Enables the colour-drift check against the source garment's ink. */
       sourceInkHex: hex.optional(),
@@ -66,14 +81,13 @@ export const collectionParamSchema = z.object({
   params: z.object({ collectionId: z.string().min(1).max(40) }),
 });
 
-/** Edit an embroidery: its name, necklines and notes, any of them. */
+/** Edit an embroidery: its name, what it goes with and notes, any of them. */
 export const renameCollectionSchema = z.object({
   params: z.object({ collectionId: z.string().min(1).max(40) }),
   body: z
     .object({
       collectionName: z.string().trim().min(1).max(120).optional(),
-      /** Neck Type options it suits; [] = every neckline. */
-      neckOptionIds: z.array(objectId).max(30).optional(),
+      ...pairingFields,
       notes: z.string().max(1500).optional(),
     })
     .refine((b) => Object.values(b).some((v) => v !== undefined), 'Nothing to change'),

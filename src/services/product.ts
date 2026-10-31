@@ -1,13 +1,5 @@
 import * as productRepository from "@repositories/product.repository";
-import * as garmentTypeRepository from "@repositories/garmentType.repository";
-import { IProduct } from "@models/product";
 import { ApiError } from "@utils/apiError";
-
-const slugify = (value: string) =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
 
 export interface ProductQuery {
   garmentTypeId?: string;
@@ -77,12 +69,6 @@ export async function getProductBySlug(slug: string) {
   return product;
 }
 
-export async function getProductById(id: string) {
-  const product = await productRepository.findById(id);
-  if (!product) throw ApiError.notFound("Product not found");
-  return product;
-}
-
 /** Same garment type, excluding the product itself (§ related products strip). */
 export async function getRelated(slug: string, limit = 4) {
   const product = await getProductBySlug(slug);
@@ -98,74 +84,3 @@ export async function getRelated(slug: string, limit = 4) {
   );
 }
 
-export async function createProduct(data: Partial<IProduct>, adminId?: string) {
-  const slug = data.slug || slugify(data.name ?? "");
-  if (!slug) throw ApiError.badRequest("A product needs a name");
-
-  const existing = await productRepository.findBySlug(slug);
-  if (existing)
-    throw ApiError.conflict("A product with that name already exists");
-
-  if (!data.garmentTypeId)
-    throw ApiError.badRequest("A product needs a garment type");
-
-  const garmentType = await garmentTypeRepository.findById(
-    String(data.garmentTypeId),
-  );
-  if (!garmentType)
-    throw ApiError.badRequest("That garment type does not exist");
-
-  return productRepository.create({
-    ...data,
-    slug,
-    createdBy: adminId as never,
-    updatedBy: adminId as never,
-  });
-}
-
-export async function updateProduct(
-  id: string,
-  data: Partial<IProduct>,
-  adminId?: string,
-) {
-  const product = await productRepository.updateById(id, {
-    ...data,
-    updatedBy: adminId as never,
-  });
-  if (!product) throw ApiError.notFound("Product not found");
-  return product;
-}
-
-/**
- * §5 lifecycle. Publishing is guarded: an active product with no images or no
- * price is a broken storefront listing, so it is refused here rather than
- * discovered by a customer.
- */
-export async function setStatus(
-  id: string,
-  status: IProduct["status"],
-  adminId?: string,
-) {
-  const product = await productRepository.findById(id);
-  if (!product) throw ApiError.notFound("Product not found");
-
-  if (status === "active") {
-    if (product.images.length === 0) {
-      throw ApiError.badRequest("Add at least one image before publishing");
-    }
-    if (!product.basePrice || product.basePrice <= 0) {
-      throw ApiError.badRequest("Set a base price before publishing");
-    }
-  }
-
-  return productRepository.updateById(id, {
-    status,
-    updatedBy: adminId as never,
-  });
-}
-
-export async function deleteProduct(id: string) {
-  const product = await productRepository.softDelete(id);
-  if (!product) throw ApiError.notFound("Product not found");
-  return product;
-}

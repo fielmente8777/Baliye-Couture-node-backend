@@ -174,8 +174,10 @@ export async function compositeEmbroidery(
 
   for (const asset of assets) {
     /* Back-of-garment work is kept for the record; the blank garment is
-       always a front view, so there is nowhere to put it. */
-    if (asset.region === 'back') continue;
+       always a front view, so there is nowhere to put it. Lower-garment work
+       has no landmark here (they stop at the kurta hem); it is placed when
+       the layout is copied from the source photo (`compositeFromPlan`). */
+    if (asset.region === 'back' || asset.region === 'lower_garment') continue;
 
     const { placement } = asset;
     const assetBuffer = await fetchAsset(asset.assetUrl);

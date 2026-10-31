@@ -24,6 +24,18 @@ const contentRoutes = Router();
  */
 /* Before /:page, or "version" would be read as a page name. Polled by open
    browsers to refresh within seconds of an admin save. */
+/**
+ * @openapi
+ * /content/version:
+ *   get:
+ *     summary: When website content last changed
+ *     description: >
+ *       Polled by open pages so admin edits show within seconds without a reload.
+ *     tags: [Content]
+ *     security: []
+ *     responses:
+ *       200: { description: data.version, which changes whenever any content page is saved }
+ */
 contentRoutes.get('/version', getContentVersion);
 contentRoutes.get('/:page', validate(contentPageParamSchema), getContent);
 

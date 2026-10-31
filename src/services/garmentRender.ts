@@ -3,11 +3,10 @@ import sharp from 'sharp';
 import { Landmarks } from './garmentLandmarks';
 
 /**
- * The deterministic half of image generation.
+ * The deterministic half of AI Studio try-ons.
  *
- * Everything the customer CHOSE — the neckline, the colour, which embroidery
- * and where it sits — is produced here with plain pixel maths, so it is exact
- * every time. The AI model is only allowed to add realism on top, and
+ * Framing and masks are produced here with plain pixel maths, so they are
+ * exact every time. The AI model is only allowed to add realism on top, and
  * `restoreOutsideMask` throws away anything it changed outside the embroidery.
  *
  * All masks are single-channel 8-bit buffers the same size as their image:
@@ -119,116 +118,6 @@ export async function toPortrait(image: Buffer, fill?: { r: number; g: number; b
       bottom: py(l.bottom),
     }),
   };
-}
-
-/**
- * Garment mask by distance from the backdrop colour.
- *
- * Same idea as the landmark detector, at full resolution. Works because base
- * garments are shot light-coloured on a plain backdrop; the rows above the
- * garment's top (the mannequin head) are cut away using the landmark bounds.
- */
-export async function garmentMask(
-  image: Buffer,
-  bounds?: { top: number; bottom: number; shoulderWidth?: number },
-): Promise<Buffer> {
-  const raw = await toRaw(image);
-  const { data, width: w, height: h } = raw;
-  const bg = backdropColour(raw);
-
-  const distances = new Float32Array(w * h);
-  const border: number[] = [];
-  for (let p = 0; p < w * h; p += 1) {
-    const i = p * 3;
-    const d = Math.sqrt(
-      (data[i] - bg[0]) ** 2 + (data[i + 1] - bg[1]) ** 2 + (data[i + 2] - bg[2]) ** 2,
-    );
-    distances[p] = d;
-    const x = p % w;
-    const y = Math.floor(p / w);
-    if (x < 3 || y < 3 || x > w - 4 || y > h - 4) border.push(d);
-  }
-
-  border.sort((a, b) => a - b);
-  const spread = border[Math.floor(border.length / 2)] ?? 0;
-  /* Lower than the landmark detector's threshold: a white garment on a light
-     backdrop differs mostly in its shadows, and a missed pixel stays uncoloured. */
-  const threshold = Math.max(18, spread * 3);
-
-  const bottom = bounds ? Math.ceil(bounds.bottom * h) : h;
-  let top = bounds ? Math.floor(bounds.top * h) : 0;
-
-  /* Fabric starts where the silhouette becomes shoulder-wide. Rows above that
-     are the mannequin's head and neck, which must never be dyed. */
-  if (bounds?.shoulderWidth) {
-    const minRun = bounds.shoulderWidth * w * 0.6;
-    for (let y = top; y < bottom; y += 1) {
-      let count = 0;
-      for (let x = 0; x < w; x += 1) if (distances[y * w + x] > threshold) count += 1;
-      if (count >= minRun) {
-        top = y;
-        break;
-      }
-    }
-  }
-
-  const mask = Buffer.alloc(w * h);
-  for (let p = 0; p < w * h; p += 1) {
-    const y = Math.floor(p / w);
-    mask[p] = y >= top && y <= bottom && distances[p] > threshold ? 255 : 0;
-  }
-
-  /* Close pinholes (flat highlights read as backdrop) and soften the edge. */
-  return fromRaw({ data: mask, width: w, height: h }, 1)
-    .blur(2)
-    .threshold(96)
-    .blur(1.2)
-    /* sharp returns sRGB (3 channels) unless told otherwise — keep 1. */
-    .extractChannel(0)
-    .raw()
-    .toBuffer();
-}
-
-const hexToRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-
-/**
- * Dyes the garment to an exact hex, keeping every fold and shadow.
- *
- * Luminance-preserving multiply: the base is shot white or light grey, so its
- * brightness at each pixel IS the shading. Normalising that brightness against
- * the garment's own highlights and multiplying by the target colour gives a
- * dyed garment whose folds are untouched. No AI — exact and instant.
- */
-export async function recolour(image: Buffer, mask: Buffer, hex: string): Promise<Buffer> {
-  const raw = await toRaw(image);
-  const { data, width: w, height: h } = raw;
-  const target = hexToRgb(hex);
-
-  /* Reference white = 97th percentile of garment luminance, so a slightly
-     grey base still dyes to the full colour rather than a darker one. */
-  const lum = new Float32Array(w * h);
-  const inside: number[] = [];
-  for (let p = 0; p < w * h; p += 1) {
-    const i = p * 3;
-    lum[p] = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-    if (mask[p] > 128 && p % 7 === 0) inside.push(lum[p]);
-  }
-  inside.sort((a, b) => a - b);
-  const white = Math.max(40, inside[Math.floor(inside.length * 0.97)] ?? 255);
-
-  const out = Buffer.alloc(data.length);
-  for (let p = 0; p < w * h; p += 1) {
-    const i = p * 3;
-    const alpha = mask[p] / 255;
-    const shade = Math.min(1.08, lum[p] / white);
-
-    for (let c = 0; c < 3; c += 1) {
-      const dyed = Math.min(255, target[c] * shade);
-      out[i + c] = Math.round(dyed * alpha + data[i + c] * (1 - alpha));
-    }
-  }
-
-  return fromRaw({ data: out, width: w, height: h }).png().toBuffer();
 }
 
 /**

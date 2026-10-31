@@ -44,19 +44,8 @@ import {
  * call here spends OpenAI credits, so it must never be open — anyone who
  * found the URL could drain the balance in a loop.
  */
-import {
-  baseGarmentIdParamSchema,
-  clearRendersSchema,
-  createBaseGarmentSchema,
-  embroideryCollectionSchema,
-} from "../types/render";
-import {
-  clearRenders,
-  createBaseGarment,
-  deleteBaseGarment,
-  listBaseGarments,
-  setEmbroideryCollection,
-} from "../controllers/designRender";
+import { embroideryCollectionSchema } from "../types/render";
+import { setEmbroideryCollection } from "../controllers/designRender";
 
 import { checkImageProvider } from "../config/imageAI";
 import { getImageUsageReport } from "../services/imageUsageReport";
@@ -202,8 +191,55 @@ aiRoutes.post("/assets/build", validate(buildAssetsSchema), buildAssets);
  */
 aiRoutes.get("/assets/collections", getCollections);
 /* Finished extractions + what each was saved as, so an unsaved one can be reopened. */
+/**
+ * @openapi
+ * /admin/ai/extractions:
+ *   get:
+ *     summary: Finished extractions from the last 7 days
+ *     description: >
+ *       Newest first, with the collection each was saved as (or none). Backs "Extractions not
+ *       saved yet". Sheets whose picture no longer loads are left out.
+ *     tags: [AI Studio]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Extractions }
+ */
 aiRoutes.get("/extractions", getExtractions);
 /* Name, necklines (→ the linked option's neck pairing) and notes for the AI. */
+/**
+ * @openapi
+ * /admin/ai/assets/collections/{collectionId}:
+ *   patch:
+ *     summary: "Edit a saved embroidery: name, what it goes with, notes"
+ *     description: >
+ *       Any of: collectionName, notes, and the neck, sleeve, length, lower, dupatta and colour
+ *       option ids it goes with. Once pairing is sent, neck and sleeve are required plus a length
+ *       or a lower. A linked Embroidery option's pairing is updated to match.
+ *     tags: [AI Studio]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: collectionId, in: path, required: true, schema: { type: string }, description: e.g. BK-EMB-1A2B3C4D }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateEmbroideryCollectionBody' }
+ *     responses:
+ *       200: { description: Saved }
+ *       400: { description: A required step is missing, or an id is from the wrong step }
+ *       404: { description: Not found }
+ *   delete:
+ *     summary: Delete a saved embroidery and all its pieces
+ *     description: >
+ *       An Embroidery option showing it is unlinked first. Images stay in Shopify Files.
+ *     tags: [AI Studio]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: collectionId, in: path, required: true, schema: { type: string }, description: e.g. BK-EMB-1A2B3C4D }
+ *     responses:
+ *       200: { description: Deleted }
+ *       404: { description: Not found }
+ */
 aiRoutes.patch("/assets/collections/:collectionId", validate(renameCollectionSchema), renameCollection);
 aiRoutes.delete("/assets/collections/:collectionId", validate(collectionParamSchema), removeCollection);
 
@@ -336,19 +372,32 @@ aiRoutes.post("/assets/apply", validate(applyAssetsSchema), applyAssets);
  */
 aiRoutes.post("/assets/preview", validate(applyAssetsSchema), previewPlacement);
 
-/* Base garment library — one blank garment per garment type + neck (+ sleeve). */
-aiRoutes.post("/base-garments", validate(createBaseGarmentSchema), createBaseGarment);
-aiRoutes.get("/base-garments", listBaseGarments);
-aiRoutes.delete("/base-garments/:id", validate(baseGarmentIdParamSchema), deleteBaseGarment);
-
 /* Which approved embroidery collection an Embroidery option renders with. */
+/**
+ * @openapi
+ * /admin/ai/embroidery-options/{optionId}/collection:
+ *   put:
+ *     summary: Show a saved embroidery in the designer through an Embroidery option
+ *     description: >
+ *       collectionId null unlinks it. The embroidery needs at least one approved piece. What it
+ *       goes with becomes the option's pairing.
+ *     tags: [AI Studio]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: optionId, in: path, required: true, schema: { type: string }, description: Embroidery option id }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/LinkEmbroideryCollectionBody' }
+ *     responses:
+ *       200: { description: Option linked }
+ *       400: { description: Not an Embroidery option, or nothing approved yet }
+ */
 aiRoutes.put(
   "/embroidery-options/:optionId/collection",
   validate(embroideryCollectionSchema),
   setEmbroideryCollection,
 );
-
-/* Forget cached design renders after re-shooting a base or changing assets. */
-aiRoutes.post("/renders/clear", validate(clearRendersSchema), clearRenders);
 
 export default aiRoutes;

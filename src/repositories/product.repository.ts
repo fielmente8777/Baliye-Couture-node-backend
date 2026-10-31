@@ -1,8 +1,4 @@
-import { IProduct, ProductModel } from "@models/product";
-
-export function create(data: Partial<IProduct>) {
-  return ProductModel.create(data);
-}
+import { ProductModel } from "@models/product";
 
 export function findAll(
   filter: Record<string, unknown> = {},
@@ -27,18 +23,4 @@ export function findById(id: string) {
 
 export function findBySlug(slug: string) {
   return ProductModel.findOne({ slug, isDeleted: false }).exec();
-}
-
-export function updateById(id: string, data: Partial<IProduct>) {
-  return ProductModel.findOneAndUpdate({ _id: id, isDeleted: false }, data, {
-    new: true,
-  }).exec();
-}
-
-export function softDelete(id: string) {
-  return ProductModel.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { isDeleted: true, status: "archived" },
-    { new: true },
-  ).exec();
 }

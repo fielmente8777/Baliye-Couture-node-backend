@@ -60,7 +60,7 @@ export async function addMember(ownerId: string, input: { name: string; email: s
   return safe;
 }
 
-/** Only members can be changed here; owners change their own details under their profile. */
+/** Only members can be changed here (name, password, on/off); owners change their own details under their profile. */
 async function memberOrThrow(id: string) {
   const admin = await AdminModel.findById(id).exec();
   if (!admin) throw ApiError.notFound('Team member not found');
@@ -83,8 +83,25 @@ export async function updateMember(id: string, input: { name?: string; password?
   return safe;
 }
 
-export async function removeMember(id: string) {
-  await memberOrThrow(id);
+/**
+ * Removes a team member, or another owner (e.g. a leftover seed account).
+ * Never the owner doing it, and never the last active owner, so someone can
+ * always sign in and manage the team.
+ */
+export async function removeMember(requesterId: string, id: string) {
+  if (requesterId === id) throw ApiError.forbidden('You cannot remove your own account');
+  const admin = await AdminModel.findById(id).exec();
+  if (!admin) throw ApiError.notFound('Team member not found');
+
+  if ((admin.role ?? 'owner') === 'owner') {
+    const otherOwners = await AdminModel.countDocuments({
+      _id: { $ne: admin._id },
+      isActive: true,
+      $or: [{ role: 'owner' }, { role: { $exists: false } }],
+    }).exec();
+    if (otherOwners === 0) throw ApiError.forbidden('The last owner account cannot be removed');
+  }
+
   await AdminModel.deleteOne({ _id: id }).exec();
   await signOutEverywhere(id);
 }

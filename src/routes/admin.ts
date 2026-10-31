@@ -11,49 +11,11 @@ import { exportSubscribers, listSubscribers, removeSubscriber } from "../control
 import { subscriberIdParamSchema } from "../types/newsletter";
 import { addMember, getTeam, removeMember, requireOwner, updateMember } from "../controllers/team";
 import { addMemberSchema, memberParamSchema, updateMemberSchema } from "../types/team";
-
-import {
-  catalogIdParamSchema,
-  createGarmentTypeSchema,
-  createProductSchema,
-  productListQuerySchema,
-  productStatusSchema,
-  updateGarmentTypeSchema,
-  updateProductSchema,
-} from "../types/catalog";
-
 import {
   getAdminProfile,
   getAllUsers,
   updateAdminProfile,
 } from "../controllers/admin";
-import {
-  createGarmentType,
-  deleteGarmentType,
-  getAllGarmentTypes,
-  getGarmentTypeWithOptions,
-  updateGarmentType,
-} from "../controllers/garmentType";
-import {
-  createProduct,
-  deleteProduct,
-  getProductById,
-  listAllProducts,
-  setProductStatus,
-  updateProduct,
-} from "../controllers/product";
-import {
-  attachImage,
-  generateVariants,
-  listImageJobs,
-  refreshImageJob,
-} from "@controllers/imageGeneration";
-import {
-  generateVariantsSchema,
-  attachImageSchema,
-} from "../types/imagejob";
-// import { attachImageSchema, generateVariantsSchema } from "@types/imagejob";
-
 import {
   cancelOrderAdmin,
   deleteOrderAdmin,
@@ -123,9 +85,73 @@ adminRoutes.get("/me", getAdminProfile);
 adminRoutes.put("/me", updateAdminProfile);
 
 /* Team members: extra admin logins the owner adds (Admin -> Team). Owners only. */
+/**
+ * @openapi
+ * /admin/team:
+ *   get:
+ *     summary: Everyone who can sign in to the admin panel
+ *     description: >
+ *       Owners only. Owners first, then team members, with role, on/off and last sign-in.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Admin accounts }
+ *       403: { description: Not an owner }
+ *   post:
+ *     summary: Add a team member
+ *     description: >
+ *       Owners only. The member signs in at /admin/login with this email and password and
+ *       sees the whole panel except Team.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/AddTeamMemberBody' }
+ *     responses:
+ *       201: { description: Member added }
+ *       409: { description: That email is already used }
+ */
 adminRoutes.get("/team", requireOwner, getTeam);
 adminRoutes.post("/team", requireOwner, validate(addMemberSchema), addMember);
+/**
+ * @openapi
+ * /admin/team/{id}:
+ *   patch:
+ *     summary: Rename a team member, set their password, or switch them on or off
+ *     description: >
+ *       Owners only, for members (not owners). A new password or switching off signs them out
+ *       on every device.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateTeamMemberBody' }
+ *     responses:
+ *       200: { description: Member updated }
+ *       403: { description: Owner accounts cannot be changed here }
+ */
 adminRoutes.patch("/team/:id", requireOwner, validate(updateMemberSchema), updateMember);
+/**
+ * @openapi
+ * /admin/team/{id}:
+ *   delete:
+ *     summary: Remove a team member or another owner
+ *     description: >
+ *       Owners only. Deletes the login and signs it out everywhere. Refuses your own account
+ *       and the last active owner.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     responses:
+ *       200: { description: Removed }
+ *       403: { description: Your own account, or the last owner }
+ *       404: { description: Not found }
+ */
 adminRoutes.delete("/team/:id", requireOwner, validate(memberParamSchema), removeMember);
 
 /**
@@ -219,89 +245,6 @@ adminRoutes.put("/settings", validate(updateSettingsSchema), updateSettings);
 
 /**
  * @openapi
- * /admin/garment-types:
- *   get:
- *     summary: List every garment type, including inactive
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Garment types }
- *   post:
- *     summary: Create a garment type
- *     description: >
- *       `optionConfigs` defines which option groups the type exposes, in what
- *       order, which are required, which options are allowed, and any
- *       dependencies between them.
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/CreateGarmentTypeBody' }
- *     responses:
- *       201: { description: Garment type created }
- *       409: { description: A garment type with that name already exists }
- */
-adminRoutes.get("/garment-types", getAllGarmentTypes);
-adminRoutes.post(
-  "/garment-types",
-  validate(createGarmentTypeSchema),
-  createGarmentType,
-);
-
-/**
- * @openapi
- * /admin/garment-types/{id}:
- *   get:
- *     summary: Get a garment type with its option groups expanded
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
- *     responses:
- *       200: { description: Garment type with resolvedGroups }
- *       404: { $ref: '#/components/responses/NotFound' }
- *   put:
- *     summary: Update a garment type or its customization config
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/UpdateGarmentTypeBody' }
- *     responses:
- *       200: { description: Garment type updated }
- *   delete:
- *     summary: Soft-delete a garment type
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
- *     responses:
- *       200: { description: Garment type deleted }
- */
-adminRoutes.get(
-  "/garment-types/:id",
-  validate(catalogIdParamSchema),
-  getGarmentTypeWithOptions,
-);
-adminRoutes.put(
-  "/garment-types/:id",
-  validate(updateGarmentTypeSchema),
-  updateGarmentType,
-);
-adminRoutes.delete(
-  "/garment-types/:id",
-  validate(catalogIdParamSchema),
-  deleteGarmentType,
-);
-
-/**
- * @openapi
  * /admin/design-catalog/sync:
  *   post:
  *     summary: Pull the design catalogue from Shopify now
@@ -321,140 +264,120 @@ adminRoutes.post(
   }),
 );
 
+/* ---- Orders ----
+   The controllers existed but were never routed, so the admin had no way to
+   move an order through Cutting → Stitching → … or cancel it. */
 /**
  * @openapi
- * /admin/products:
+ * /admin/orders:
  *   get:
- *     summary: List products in every status
+ *     summary: List made-to-order orders
+ *     description: >
+ *       Orders created by this server for custom designs. Ready-to-wear orders live in Shopify.
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - $ref: '#/components/parameters/PageQuery'
  *       - $ref: '#/components/parameters/LimitQuery'
  *     responses:
- *       200: { description: Paginated products }
- *   post:
- *     summary: Create a product
- *     description: Created as a draft unless a status is set explicitly.
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/CreateProductBody' }
- *     responses:
- *       201: { description: Product created }
- *       409: { description: A product with that name already exists }
+ *       200: { description: Orders }
  */
-adminRoutes.get("/products", validate(productListQuerySchema), listAllProducts);
-adminRoutes.post("/products", validate(createProductSchema), createProduct);
-
+adminRoutes.get("/orders", getAllOrdersAdmin);
 /**
  * @openapi
- * /admin/products/{id}:
+ * /admin/orders/{id}:
  *   get:
- *     summary: Get a product in any status
+ *     summary: One made-to-order order
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
  *     responses:
- *       200: { description: Product }
- *   put:
- *     summary: Update a product
- *     tags: [Admin]
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema: { $ref: '#/components/schemas/UpdateProductBody' }
- *     responses:
- *       200: { description: Product updated }
+ *       200: { description: Order }
+ *       404: { description: Not found }
  *   delete:
- *     summary: Archive a product
+ *     summary: Delete a made-to-order order
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
  *     responses:
- *       200: { description: Product archived }
+ *       200: { description: Deleted }
+ *       404: { description: Not found }
  */
-adminRoutes.get(
-  "/products/:id",
-  validate(catalogIdParamSchema),
-  getProductById,
-);
-adminRoutes.put("/products/:id", validate(updateProductSchema), updateProduct);
-adminRoutes.delete(
-  "/products/:id",
-  validate(catalogIdParamSchema),
-  deleteProduct,
-);
-
+adminRoutes.get("/orders/:id", validate(idParamSchema), getOrderByIdAdmin);
 /**
  * @openapi
- * /admin/products/{id}/status:
+ * /admin/orders/{id}/status:
  *   patch:
- *     summary: Move a product through its lifecycle
+ *     summary: Move an order to its next production status
  *     description: >
- *       Publishing to `active` is refused unless the product has at least one
- *       image and a base price — a broken listing should fail here, not be
- *       discovered by a customer.
+ *       Pending, Confirmed, Measurement Verified, Cutting, Stitching, Quality Check, Ready, Shipped,
+ *       Delivered, or Cancelled; only the next allowed status is accepted. The customer sees it under My orders.
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - $ref: '#/components/parameters/IdParam'
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema: { $ref: '#/components/schemas/ProductStatusBody' }
+ *           schema: { $ref: '#/components/schemas/UpdateOrderStatusBody' }
  *     responses:
  *       200: { description: Status updated }
- *       400: { description: Product is not ready to publish }
+ *       400: { description: Not a valid next status }
  */
-adminRoutes.patch(
-  "/products/:id/status",
-  validate(productStatusSchema),
-  setProductStatus,
-);
-
-adminRoutes.post(
-  "/products/:id/generate-variants",
-  validate(generateVariantsSchema),
-  generateVariants,
-);
-adminRoutes.get(
-  "/products/:id/image-jobs",
-  validate(catalogIdParamSchema),
-  listImageJobs,
-);
-adminRoutes.post(
-  "/image-jobs/:id/refresh",
-  validate(catalogIdParamSchema),
-  refreshImageJob,
-);
-adminRoutes.post(
-  "/image-jobs/:id/attach",
-  validate(attachImageSchema),
-  attachImage,
-);
-
-/* ---- Orders ----
-   The controllers existed but were never routed, so the admin had no way to
-   move an order through Cutting → Stitching → … or cancel it. */
-adminRoutes.get("/orders", getAllOrdersAdmin);
-adminRoutes.get("/orders/:id", validate(idParamSchema), getOrderByIdAdmin);
 adminRoutes.patch("/orders/:id/status", validate(updateOrderStatusSchema), updateOrderStatusAdmin);
+/**
+ * @openapi
+ * /admin/orders/{id}/cancel:
+ *   put:
+ *     summary: Cancel a made-to-order order
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CancelOrderBody' }
+ *     responses:
+ *       200: { description: Cancelled }
+ *       400: { description: Already dispatched or cancelled }
+ */
 adminRoutes.put("/orders/:id/cancel", validate(cancelOrderSchema), cancelOrderAdmin);
 adminRoutes.delete("/orders/:id", validate(idParamSchema), deleteOrderAdmin);
 
 /* ---- Replacement & alteration requests ---- */
+/**
+ * @openapi
+ * /admin/replacements:
+ *   get:
+ *     summary: All replacement and alteration requests
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: status, in: query, schema: { type: string, enum: [requested, approved, rejected, in_progress, completed] } }
+ *       - $ref: '#/components/parameters/PageQuery'
+ *       - $ref: '#/components/parameters/LimitQuery'
+ *     responses:
+ *       200: { description: Requests }
+ */
 adminRoutes.get("/replacements", validate(replacementListQuerySchema), adminListReplacements);
+/**
+ * @openapi
+ * /admin/replacements/{id}:
+ *   patch:
+ *     summary: Approve, reject or progress a replacement request
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateReplacementBody' }
+ *     responses:
+ *       200: { description: Request updated }
+ *       404: { description: Not found }
+ */
 adminRoutes.patch("/replacements/:id", validate(updateReplacementSchema), adminUpdateReplacement);
 
 /* ---- Design Builder (create-your-own-design) ----
@@ -492,14 +415,146 @@ adminRoutes.post(
   catalogAdmin.uploadCatalogImage,
 );
 
+/**
+ * @openapi
+ * /admin/catalog/garments:
+ *   post:
+ *     summary: Add a garment to the Design Builder
+ *     description: >
+ *       Creates the garment and its Shopify entries. A garment deleted earlier with the same name
+ *       is brought back instead.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateCatalogGarmentBody' }
+ *     responses:
+ *       201: { description: Garment created }
+ *       409: { description: A garment with that name already exists }
+ */
 adminRoutes.post("/catalog/garments", validate(createCatalogGarmentSchema), catalogAdmin.createGarment);
+/**
+ * @openapi
+ * /admin/catalog/garments/{id}:
+ *   put:
+ *     summary: "Update a garment: details, steps in the builder, measurements asked for"
+ *     description: >
+ *       Name, price, description and visibility are also written to Shopify.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateCatalogGarmentBody' }
+ *     responses:
+ *       200: { description: Garment updated }
+ *       404: { description: Not found }
+ *   delete:
+ *     summary: Delete a garment
+ *     description: >
+ *       Soft delete: gone from the Design Builder and the website, hidden in Shopify.
+ *       Saved designs and orders keep their copy.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     responses:
+ *       200: { description: Deleted }
+ *       404: { description: Not found }
+ */
 adminRoutes.put("/catalog/garments/:id", validate(updateCatalogGarmentSchema), catalogAdmin.updateGarment);
 adminRoutes.delete("/catalog/garments/:id", validate(catalogItemIdSchema), catalogAdmin.deleteGarment);
 
+/**
+ * @openapi
+ * /admin/catalog/groups:
+ *   post:
+ *     summary: Add a step (option group), e.g. Dupatta
+ *     description: >
+ *       Then add it to a garment with PUT /admin/catalog/garments/{id}.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateCatalogGroupBody' }
+ *     responses:
+ *       201: { description: Step created }
+ *       409: { description: A step with that code already exists }
+ */
 adminRoutes.post("/catalog/groups", validate(createCatalogGroupSchema), catalogAdmin.createGroup);
+/**
+ * @openapi
+ * /admin/catalog/groups/{id}:
+ *   put:
+ *     summary: Update a step's title and help text
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateCatalogGroupBody' }
+ *     responses:
+ *       200: { description: Step updated }
+ *       404: { description: Not found }
+ */
 adminRoutes.put("/catalog/groups/:id", validate(updateCatalogGroupSchema), catalogAdmin.updateGroup);
+/**
+ * @openapi
+ * /admin/catalog/groups/{groupId}/options:
+ *   post:
+ *     summary: Add an option to a step
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: groupId, in: path, required: true, schema: { type: string }, description: Option group id }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/CreateCatalogOptionBody' }
+ *     responses:
+ *       201: { description: Option created }
+ *       404: { description: Step not found }
+ */
 adminRoutes.post("/catalog/groups/:groupId/options", validate(createCatalogOptionSchema), catalogAdmin.createOption);
 
+/**
+ * @openapi
+ * /admin/catalog/options/{id}:
+ *   put:
+ *     summary: "Update an option: name, price, picture, visibility, pairing"
+ *     description: >
+ *       pairsWith lists options from other steps it goes with; pairing works both ways in step
+ *       order. For embroidery linked in AI Studio, AI Studio keeps the pairing in sync.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/UpdateCatalogOptionBody' }
+ *     responses:
+ *       200: { description: Option updated }
+ *       404: { description: Not found }
+ *   delete:
+ *     summary: Delete an option from every garment
+ *     description: >
+ *       Also removed from every other option's pairing. Saved designs keep their copy.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ $ref: '#/components/parameters/IdParam' }]
+ *     responses:
+ *       200: { description: Deleted }
+ *       404: { description: Not found }
+ */
 adminRoutes.put("/catalog/options/:id", validate(updateCatalogOptionSchema), catalogAdmin.updateOption);
 adminRoutes.delete("/catalog/options/:id", validate(catalogItemIdSchema), catalogAdmin.deleteOption);
 
@@ -534,9 +589,19 @@ adminRoutes.post("/catalog/import", sheetUpload.array("files", 2), catalogAdmin.
  * @openapi
  * /admin/content/{page}:
  *   put:
- *     summary: Save a page's content (home, footer, terms)
+ *     summary: Save a page's content (home, products, footer, terms)
+ *     description: >
+ *       Replaces the page's saved content. Open website pages pick it up within
+ *       seconds (see GET /content/version).
  *     tags: [Admin]
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { name: page, in: path, required: true, schema: { type: string, enum: [home, products, footer, terms] } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/SaveContentBody' }
  *     responses:
  *       200: { description: Saved }
  * /admin/uploads:
@@ -549,6 +614,23 @@ adminRoutes.post("/catalog/import", sheetUpload.array("files", 2), catalogAdmin.
  *       200: { description: The image url }
  */
 /* Before /content/:page. "Write with AI" for any text field in the editor. */
+/**
+ * @openapi
+ * /admin/content/write:
+ *   post:
+ *     summary: "Write with AI: draft or rework text for a content field"
+ *     description: >
+ *       Returns a suggestion only; nothing is saved until PUT /admin/content/{page}.
+ *     tags: [Admin]
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/WriteContentBody' }
+ *     responses:
+ *       200: { description: Suggested text }
+ */
 adminRoutes.post("/content/write", validate(writeContentSchema), writeContent);
 adminRoutes.put("/content/:page", validate(saveContentSchema), saveContent);
 adminRoutes.post("/uploads", memoryUpload.single("file"), uploadImage);

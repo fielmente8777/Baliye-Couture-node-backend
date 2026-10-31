@@ -17,14 +17,8 @@ import {
   getMyDesigns,
   quotePrice,
 } from '../controllers/design.v2';
-import {
-  getColourRender,
-  getRender,
-  lookupColourRender,
-  recolourPhoto,
-  renderDesign,
-} from '../controllers/designRender';
-import { recolourPhotoSchema, renderDesignSchema, renderKeyParamSchema } from '../types/render';
+import { getColourRender, lookupColourRender, recolourPhoto } from '../controllers/designRender';
+import { recolourPhotoSchema, renderKeyParamSchema } from '../types/render';
 import { renderRateLimiter } from '../middlewares/ratelimit';
 
 const designRoutes = Router();
@@ -84,41 +78,25 @@ designRoutes.post('/quote', validate(quotePriceSchema), quotePrice);
 
 /**
  * @openapi
- * /designs/render:
- *   post:
- *     tags: [Designs]
- *     summary: Image of the design for the current selections
- *     description: >
- *       Returns previewUrl immediately (exact colour, neckline and embroidery
- *       placement, built by code). If status is "blending", poll
- *       GET /designs/render/{key} and swap to finalUrl when status is "ready".
- *       status "unavailable" means no base image exists for that neck yet.
- */
-designRoutes.post('/render', renderRateLimiter, validate(renderDesignSchema), renderDesign);
-designRoutes.get('/render/:key', validate(renderKeyParamSchema), getRender);
-
-/**
- * @openapi
  * /designs/recolour:
  *   post:
- *     tags: [Designs]
- *     summary: The design photo re-dyed to a colour option
+ *     tags: [Design]
+ *     summary: The designer's AI preview for the customer's choices
  *     description: >
- *       AI re-dyes the fabric of a real garment photo (Shopify CDN or our own
- *       uploads) to the chosen Colour option, keeping embroidery, cut and pose.
- *       Cached per photo + colour. While status is "generating", poll
- *       GET /designs/recolour/{key}; show url when status is "ready".
+ *       AI edits a real garment photo (Shopify CDN or our own uploads) to show
+ *       every chosen option in `options` (colour, fabric, neck, sleeve, length,
+ *       embroidery…), each with the picture from its option card. Linked AI
+ *       Studio embroidery is copied from its extracted sheet and pieces.
+ *       `colourOptionId` alone still works for colour-only previews. Cached per
+ *       photo + choices. While status is "generating", poll
+ *       GET /designs/recolour/{key}; show url when status is "ready". Uses a
+ *       design credit when credits are on.
  *     security: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
- *           schema:
- *             type: object
- *             required: [imageUrl, colourOptionId]
- *             properties:
- *               imageUrl: { type: string }
- *               colourOptionId: { type: string }
+ *           schema: { $ref: '#/components/schemas/RecolourPhotoBody' }
  */
 designRoutes.post(
   '/recolour',
@@ -132,15 +110,36 @@ designRoutes.post(
  * @openapi
  * /designs/recolour/lookup:
  *   post:
- *     tags: [Designs]
- *     summary: Is this photo + colour already generated?
+ *     tags: [Design]
+ *     summary: Is this preview already generated?
  *     description: >
- *       Free and never starts anything. Returns the cached recolour, or null.
+ *       Free and never starts anything. Returns the cached preview, or null.
  *       With design tokens on, the builder calls this first and only offers a
  *       paid preview when it returns null.
  *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { $ref: '#/components/schemas/RecolourPhotoBody' }
  */
 designRoutes.post('/recolour/lookup', validate(recolourPhotoSchema), lookupColourRender);
+/**
+ * @openapi
+ * /designs/recolour/{key}:
+ *   get:
+ *     summary: Poll a designer preview
+ *     description: >
+ *       Returns the preview started by POST /designs/recolour. Poll until status is "ready"
+ *       (or "failed") and show its imageUrl.
+ *     tags: [Design]
+ *     security: []
+ *     parameters:
+ *       - { name: key, in: path, required: true, schema: { type: string }, description: 40-character preview key from POST /designs/recolour }
+ *     responses:
+ *       200: { description: Preview status and image }
+ *       404: { description: Unknown key }
+ */
 designRoutes.get('/recolour/:key', validate(renderKeyParamSchema), getColourRender);
 
 /**

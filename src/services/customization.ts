@@ -29,6 +29,56 @@ export interface ResolvedGroup {
 }
 
 /**
+ * The steps in the order the Design Builder set, exactly as the stepper shows
+ * them (CreateDesignShell.tsx), so both agree on "earlier". Pairing works
+ * both ways, so any order is valid: Embroidery before Neck narrows the necks
+ * to the embroidery's, Embroidery after Neck narrows the embroidery list.
+ */
+function stepOrder(configs: IOptionConfig[]) {
+  return [...configs].sort((a, b) => a.position - b.position);
+}
+
+/** `option`'s pairs that are options of the step `groupId`. */
+const pairsIn = (option: IOption, groupId: string, groupOf: Map<string, string>) =>
+  (option.pairsWith ?? []).map(String).filter((id) => groupOf.get(id) === groupId);
+
+/**
+ * Pairing (`pairsWith`, e.g. an embroidery's neck, sleeve, lower and colour).
+ * It works both ways and follows the step order: an option is offered only if
+ * it suits every choice made in an earlier step. A suits B when A's pairs in
+ * B's step (if it has any there) include B, and B's pairs in A's step include
+ * A. So Colour and Neck, before Embroidery, narrow the embroidery list; the
+ * chosen embroidery then narrows Sleeve, Length, Lower and Dupatta, after it.
+ * Each step is checked on its own, so the neck and the sleeve must both fit.
+ *
+ * A later step with no choice yet hides nothing, except that an option whose
+ * pairs in a later step are all missing from this garment is dropped — the
+ * customer could never finish it (an embroidery for a salwar, on a sharara).
+ * Pairs pointing at deactivated or deleted options are ignored.
+ *
+ * Mirrored by `isOptionAvailable` in the stepper (CreateDesignShell.tsx).
+ */
+function isPairable(
+  option: IOption,
+  earlier: IOption[],
+  later: string[],
+  offered: Map<string, Set<string>>,
+  groupOf: Map<string, string>
+) {
+  const own = option.groupId.toString();
+  for (const chosen of earlier) {
+    const mine = pairsIn(option, chosen.groupId.toString(), groupOf);
+    if (mine.length && !mine.includes(chosen._id.toString())) return false;
+    const theirs = pairsIn(chosen, own, groupOf);
+    if (theirs.length && !theirs.includes(option._id.toString())) return false;
+  }
+  return later.every((gid) => {
+    const mine = pairsIn(option, gid, groupOf);
+    return mine.length === 0 || mine.some((id) => offered.get(gid)?.has(id));
+  });
+}
+
+/**
  * Expands configs into the groups and options a customer may actually pick,
  * honouring `allowedOptions` and dropping anything deactivated since.
  */
@@ -52,41 +102,47 @@ export async function resolveConfigs(
 
   const selectedByGroup = new Map(selections.map((s) => [s.groupId, s.optionId]));
 
-  /**
-   * Pairing (e.g. embroidery by neckline). An option with `pairsWith` is only
-   * offered when the customer's choice in the paired group is one of those
-   * options. If that group has no choice yet, nothing is hidden — the stepper
-   * asks Neck before Embroidery, so in practice the choice is always there.
-   */
-  const optionGroupOf = new Map(options.map((o) => [o._id.toString(), o.groupId.toString()]));
-  const selectedOptionIds = new Set(selections.map((s) => s.optionId));
+  const ordered = stepOrder(configs);
+  const rankOf = new Map(ordered.map((c, i) => [c.groupId.toString(), i]));
 
-  const pairsWithSelection = (option: IOption) => {
-    const pairs = option.pairsWith?.map((id) => id.toString()) ?? [];
-    if (pairs.length === 0) return true;
-
-    const pairedGroups = new Set(
-      pairs.map((id) => optionGroupOf.get(id)).filter((g): g is string => Boolean(g))
+  /* What each step offers on this garment before pairing. */
+  const offered = new Map<string, Set<string>>();
+  for (const config of ordered) {
+    const allowed = config.allowedOptions?.map((id) => id.toString()) ?? [];
+    const gid = config.groupId.toString();
+    offered.set(
+      gid,
+      new Set(
+        options
+          .filter((o) => o.groupId.toString() === gid && (allowed.length === 0 || allowed.includes(o._id.toString())))
+          .map((o) => o._id.toString())
+      )
     );
-    const groupHasChoice = [...pairedGroups].some((g) => selectedByGroup.has(g));
-    if (!groupHasChoice) return true;
+  }
 
-    return pairs.some((id) => selectedOptionIds.has(id));
-  };
+  const optionById = new Map<string, IOption>(options.map((o) => [o._id.toString(), o]));
+  const groupOf = new Map(options.map((o) => [o._id.toString(), o.groupId.toString()]));
+  const selectedBefore = (rank: number) =>
+    selections
+      .filter((s) => (rankOf.get(s.groupId) ?? Infinity) < rank)
+      .map((s) => optionById.get(s.optionId))
+      .filter((o): o is IOption => Boolean(o));
 
   const resolved: ResolvedGroup[] = [];
 
-  for (const config of [...configs].sort((a, b) => a.position - b.position)) {
+  for (const config of ordered) {
     const group = groupMap.get(config.groupId.toString());
     /* Silently skip groups the admin deactivated — better than 500ing a page. */
     if (!group) continue;
 
-    const allowed = config.allowedOptions?.map((id) => id.toString()) ?? [];
+    const gid = config.groupId.toString();
+    const rank = rankOf.get(gid) ?? 0;
+    const earlier = selectedBefore(rank);
+    const later = ordered.slice(rank + 1).map((c) => c.groupId.toString());
 
     const groupOptions = options.filter((o) => {
-      if (o.groupId.toString() !== config.groupId.toString()) return false;
-      if (allowed.length > 0 && !allowed.includes(o._id.toString())) return false;
-      return pairsWithSelection(o);
+      if (!offered.get(gid)?.has(o._id.toString())) return false;
+      return isPairable(o, earlier, later, offered, groupOf);
     });
 
     /**

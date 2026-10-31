@@ -28,10 +28,12 @@ export interface IOption extends Document {
   priceModifier: number;
 
   /**
-   * Options in OTHER groups this one is restricted to. Empty means it pairs
-   * with everything. Used for embroidery-by-neckline: "Keyhole embroidery"
-   * lists the neck options it suits, and is hidden when any other neck is
-   * chosen. Filled from src/script/data/embroidery-pairs.json.
+   * Options in OTHER groups this one goes with. Empty means it pairs with
+   * everything. Works both ways, in step order (`isPairable` in
+   * services/customization.ts): an embroidery lists the colours, necks,
+   * sleeves, lengths, lowers and dupattas it suits. Set in the Design
+   * Builder ("Only offer with"), or by AI Studio for linked embroidery
+   * (`syncStudioPairing`).
    */
   pairsWith: Types.ObjectId[];
 

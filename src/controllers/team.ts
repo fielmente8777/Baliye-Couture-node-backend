@@ -29,6 +29,6 @@ export const updateMember = asyncHandler(async (req: Request, res: Response) => 
 });
 
 export const removeMember = asyncHandler(async (req: Request, res: Response) => {
-  await teamService.removeMember(req.params.id);
+  await teamService.removeMember(req.authUser!.id, req.params.id);
   ApiResponse.success(res, HttpStatus.OK, 'Team member removed');
 });

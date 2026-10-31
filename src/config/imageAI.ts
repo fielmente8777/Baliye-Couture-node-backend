@@ -48,9 +48,6 @@ export interface ImageTask {
   usage?: ImageUsage;
 }
 
-/** Old name, kept so existing imports keep compiling. */
-export type MagnificTask = ImageTask;
-
 export interface GenerateInput {
   /** base64 (no prefix), a data: URL, or an http(s) URL. Up to 16. */
   images: string[];
@@ -635,18 +632,6 @@ export async function getTask(taskId: string): Promise<ImageTask> {
       : 'This job was started with the previous image provider — run it again.',
   };
 }
-
-/** Single-image edit that keeps the photo's framing (product variants). */
-export function generateVariant(input: { referenceImage: string; prompt: string; webhookUrl?: string }) {
-  return generateWithReferences({
-    images: [input.referenceImage],
-    prompt: input.prompt,
-    preserveFrame: true,
-    label: 'variant',
-  });
-}
-
-export const getVariantTask = getTask;
 
 /**
  * Confirms the key works and the model is available — without generating

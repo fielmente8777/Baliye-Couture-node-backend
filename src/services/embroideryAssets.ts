@@ -63,8 +63,16 @@ export interface BuildAssetsInput {
   collectionId?: string;
   /** Small copies of the garment photos, so the labeller sees where each piece sits. */
   references?: { image: string; label?: string }[];
-  /** A new collection's necklines and notes, saved with it. */
+  /**
+   * A new collection's details, saved with it: the neck, sleeve and length or
+   * lower it is made for (required), dupatta and colour (optional), notes.
+   */
   neckOptionIds?: string[];
+  sleeveOptionIds?: string[];
+  lengthOptionIds?: string[];
+  lowerOptionIds?: string[];
+  dupattaOptionIds?: string[];
+  colourOptionIds?: string[];
   notes?: string;
   /**
    * Ink colour of the source garment's embroidery, if known. Supplying it
@@ -87,6 +95,9 @@ export async function buildAssetsFromJob(
 ): Promise<BuildAssetsResult> {
   let sheet: Buffer;
   let sourceJobId: IEmbroideryAsset['sourceJobId'];
+
+  /* A new embroidery must say what it goes with before anything is saved. */
+  if (!input.collectionId) await assertNewCollectionDetails(input);
 
   if (input.jobId) {
     const job = await ImageJobModel.findById(input.jobId).exec();
@@ -138,8 +149,10 @@ export async function buildAssetsFromJob(
     if (!existing) throw ApiError.notFound('That embroidery collection no longer exists');
     collectionId = input.collectionId;
     input.collectionName = existing.collectionName;
-  } else if (input.neckOptionIds?.length || input.notes?.trim()) {
-    await saveCollectionDetails(collectionId, { neckOptionIds: input.neckOptionIds, notes: input.notes });
+  } else {
+    const details: CollectionDetailsInput = { notes: input.notes };
+    for (const { field } of PAIRING_FIELDS) details[field] = input[field] ?? [];
+    await saveCollectionDetails(collectionId, details);
   }
   const assets: IEmbroideryAsset[] = [];
 
@@ -230,7 +243,7 @@ export function listCollections() {
     },
     { $sort: { createdAt: -1 } },
     { $limit: 50 },
-    /* Its necklines and notes, when the admin set any. */
+    /* What it goes with, and its notes, when the admin set any. */
     {
       $lookup: {
         from: EmbroideryCollectionModel.collection.name,
@@ -241,7 +254,9 @@ export function listCollections() {
     },
     {
       $addFields: {
-        neckOptionIds: { $ifNull: [{ $first: '$details.neckOptionIds' }, []] },
+        ...Object.fromEntries(
+          PAIRING_FIELDS.map(({ field }) => [field, { $ifNull: [{ $first: `$details.${field}` }, []] }])
+        ),
         notes: { $ifNull: [{ $first: '$details.notes' }, ''] },
       },
     },
@@ -249,68 +264,146 @@ export function listCollections() {
   ]).exec();
 }
 
-/* ---- Embroidery details: necklines and notes --------------------------- */
+/* ---- Embroidery details: what it goes with, and notes ------------------ */
+
+/**
+ * The designer steps an embroidery is matched to, by option-group code.
+ * Neck and colour come before Embroidery in the designer, so they decide
+ * which embroidery is offered; sleeve, length, lower and dupatta come after
+ * it, so picking the embroidery narrows those steps to its choices (the
+ * pairing rule in `customization.ts` works both ways).
+ */
+export const PAIRING_FIELDS = [
+  { field: 'neckOptionIds', code: 'neck', label: 'neck type' },
+  { field: 'sleeveOptionIds', code: 'sleeve', label: 'sleeve type' },
+  { field: 'lengthOptionIds', code: 'length', label: 'length' },
+  { field: 'lowerOptionIds', code: 'lower', label: 'lower' },
+  { field: 'dupattaOptionIds', code: 'dupatta', label: 'dupatta' },
+  { field: 'colourOptionIds', code: 'color', label: 'colour' },
+] as const;
+
+export type PairingField = (typeof PAIRING_FIELDS)[number]['field'];
+export type CollectionDetailsInput = Partial<Record<PairingField, string[]>> & { notes?: string };
+
+const PAIRING_SELECT = PAIRING_FIELDS.map((f) => f.field).join(' ');
+
+/**
+ * Neck and sleeve are required; length and lower are per garment (kurti and
+ * anarkali have Length, patiala and sharara have Lower), so one of the two
+ * will do. Dupatta and colour are optional: none means any.
+ */
+function pairingProblem(details: Partial<Record<PairingField, unknown[]>>) {
+  if (!details.neckOptionIds?.length) return 'Choose the neck type this embroidery is made for';
+  if (!details.sleeveOptionIds?.length) return 'Choose the sleeve type this embroidery is made for';
+  if (!details.lengthOptionIds?.length && !details.lowerOptionIds?.length) {
+    return 'Choose the length or the lower this embroidery is made for';
+  }
+  return null;
+}
 
 export async function collectionNotes(collectionId: string) {
   const details = await EmbroideryCollectionModel.findOne({ collectionId }).select('notes').lean().exec();
   return details?.notes?.trim() || undefined;
 }
 
-/** Every Neck Type option id, so neck pairing can be told apart from the admin's other pairings. */
-async function neckOptionIdsAll() {
-  const neck = await OptionGroupModel.findOne({ code: 'neck' }).select('_id').lean().exec();
-  if (!neck) return new Set<string>();
-  const options = await OptionModel.find({ groupId: neck._id }).select('_id').lean().exec();
-  return new Set(options.map((o) => o._id.toString()));
+/** Each paired step's option ids, so studio pairing can be told apart from the admin's other pairings. */
+async function pairingOptionIds() {
+  const groups = await OptionGroupModel.find({ code: { $in: PAIRING_FIELDS.map((f) => f.code) } })
+    .select('_id code')
+    .lean()
+    .exec();
+  const options = await OptionModel.find({ groupId: { $in: groups.map((g) => g._id) } })
+    .select('_id groupId')
+    .lean()
+    .exec();
+  const byCode = new Map<string, Set<string>>(PAIRING_FIELDS.map((f) => [f.code, new Set<string>()]));
+  for (const o of options) {
+    const code = groups.find((g) => g._id.equals(o.groupId))?.code;
+    if (code) byCode.get(code)?.add(o._id.toString());
+  }
+  return byCode;
 }
 
 /**
- * Makes an Embroidery option's neck pairing match its AI Studio embroidery:
- * the option is then offered only with those necklines, by the same rule the
- * Design Builder's "Only offer with" uses (server and stepper both read
+ * Makes an Embroidery option's pairing match its AI Studio embroidery: the
+ * option is then offered only with those choices, by the same rule the Design
+ * Builder's "Only offer with" uses (server and stepper both read
  * `pairsWith`). Pairings with other steps are left alone. While linked, the
- * studio owns the neck part; `collectionId` null clears it (on unlink).
+ * studio owns the neck, sleeve, length, lower, dupatta and colour part;
+ * `collectionId` null clears it (on unlink).
  */
-export async function syncNeckPairing(optionId: string, collectionId: string | null) {
+export async function syncStudioPairing(optionId: string, collectionId: string | null) {
   const option = await OptionModel.findById(optionId).exec();
   if (!option) return;
-  const necks = await neckOptionIdsAll();
+  const byCode = await pairingOptionIds();
+  const studio = new Set([...byCode.values()].flatMap((ids) => [...ids]));
   const details = collectionId
-    ? await EmbroideryCollectionModel.findOne({ collectionId }).select('neckOptionIds').lean().exec()
+    ? await EmbroideryCollectionModel.findOne({ collectionId }).select(PAIRING_SELECT).lean().exec()
     : null;
-  const keep = (option.pairsWith ?? []).filter((id) => !necks.has(id.toString()));
-  const wanted = (details?.neckOptionIds ?? []).filter((id) => necks.has(id.toString()));
+  const keep = (option.pairsWith ?? []).filter((id) => !studio.has(id.toString()));
+  const wanted = PAIRING_FIELDS.flatMap(({ field, code }) =>
+    (details?.[field] ?? []).filter((id) => byCode.get(code)?.has(id.toString()))
+  );
   option.pairsWith = [...keep, ...wanted];
   await option.save();
 }
 
-/** Saves a collection's necklines and/or notes, and re-pairs the option showing it. */
-export async function saveCollectionDetails(
-  collectionId: string,
-  data: { neckOptionIds?: string[]; notes?: string },
-) {
-  const set: Record<string, unknown> = {};
-  if (data.neckOptionIds) {
-    const necks = await neckOptionIdsAll();
-    const unknown = data.neckOptionIds.filter((id) => !necks.has(id));
-    if (unknown.length) throw ApiError.badRequest('Pick necklines from the Neck Type step only');
-    set.neckOptionIds = data.neckOptionIds.map((id) => new Types.ObjectId(id));
+/**
+ * Checks a new embroidery's details before any AI work is spent on it: the
+ * required steps are chosen, and every id belongs to its own step.
+ */
+export async function assertNewCollectionDetails(data: CollectionDetailsInput) {
+  const problem = pairingProblem(data);
+  if (problem) throw ApiError.badRequest(problem);
+  await pairingSet(data);
+}
+
+/** The `$set` for the pairing fields sent, after checking each id is from its own step. */
+async function pairingSet(data: CollectionDetailsInput) {
+  const set: Record<string, Types.ObjectId[]> = {};
+  const sent = PAIRING_FIELDS.filter(({ field }) => data[field] !== undefined);
+  if (!sent.length) return set;
+
+  const byCode = await pairingOptionIds();
+  for (const { field, code, label } of sent) {
+    const ids = data[field] ?? [];
+    if (ids.some((id) => !byCode.get(code)?.has(id))) {
+      throw ApiError.badRequest(`Pick the ${label} from the Design Builder's ${label} step only`);
+    }
+    set[field] = ids.map((id) => new Types.ObjectId(id));
   }
+  return set;
+}
+
+/** Saves a collection's pairing and/or notes, and re-pairs the option showing it. */
+export async function saveCollectionDetails(collectionId: string, data: CollectionDetailsInput) {
+  const set: Record<string, unknown> = await pairingSet(data);
+  const pairingChanged = Object.keys(set).length > 0;
+
+  /* The required steps must still be chosen after the change. Older
+     embroidery saved before they existed is held to it once its pairing is
+     edited; a notes-only edit leaves it alone. */
+  if (pairingChanged) {
+    const current = await EmbroideryCollectionModel.findOne({ collectionId }).select(PAIRING_SELECT).lean().exec();
+    const problem = pairingProblem({ ...current, ...set });
+    if (problem) throw ApiError.badRequest(problem);
+  }
+
   if (data.notes !== undefined) set.notes = data.notes.trim();
   if (!Object.keys(set).length) return;
 
   await EmbroideryCollectionModel.updateOne({ collectionId }, { $set: set }, { upsert: true }).exec();
 
-  if (data.neckOptionIds) {
+  if (pairingChanged) {
     const linked = await OptionModel.find({ assetCollectionId: collectionId }).select('_id').lean().exec();
-    for (const o of linked) await syncNeckPairing(o._id.toString(), collectionId);
+    for (const o of linked) await syncStudioPairing(o._id.toString(), collectionId);
   }
 }
 
-/** Edit from AI Studio: name, necklines and notes, any of them. */
+/** Edit from AI Studio: name, pairing and notes, any of them. */
 export async function updateCollection(
   collectionId: string,
-  data: { collectionName?: string; neckOptionIds?: string[]; notes?: string },
+  data: CollectionDetailsInput & { collectionName?: string },
 ) {
   const exists = await EmbroideryAssetModel.exists({ collectionId });
   if (!exists) throw ApiError.notFound('Collection not found');
@@ -443,9 +536,9 @@ export async function renameCollection(collectionId: string, collectionName: str
  * list while other embroidery is linked).
  */
 export async function deleteCollection(collectionId: string) {
-  /* Its neck pairing goes with it, so the option isn't left neck-limited. */
+  /* Its pairing goes with it, so the option isn't left limited. */
   const linked = await OptionModel.find({ assetCollectionId: collectionId }).select('_id').lean().exec();
-  for (const o of linked) await syncNeckPairing(o._id.toString(), null);
+  for (const o of linked) await syncStudioPairing(o._id.toString(), null);
   await OptionModel.updateMany({ assetCollectionId: collectionId }, { $unset: { assetCollectionId: 1 } }).exec();
 
   const { deletedCount } = await EmbroideryAssetModel.deleteMany({ collectionId }).exec();

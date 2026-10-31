@@ -101,7 +101,9 @@ function instructions(
       : '',
     'The FIRST image is a sheet of the extracted embroidery on white, every piece outlined in red and numbered.',
     'The sheet was laid out to mirror the garment seen from the front: neck pieces at the top, the left side of',
-    'the garment (as seen in the photo) on the left, the right side on the right, borders along the bottom.',
+    'the garment (as seen in the photo) on the left, the right side on the right, borders along the bottom, and',
+    'work on the lower garment (salwar, pajama, sharara) in the very bottom row. Name those pieces for the lower,',
+    'e.g. "Salwar Ankle Border", with region "lower_garment", never as the kurta hem.',
     references?.length
       ? `The other ${references.length} image(s) are photos of the garment itself` +
         (references.some((r) => r.label) ? ` (${references.map((r, i) => `photo ${i + 1}: ${r.label || 'garment'}`).join('; ')})` : '') +

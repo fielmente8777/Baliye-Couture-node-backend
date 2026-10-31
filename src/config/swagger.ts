@@ -10,7 +10,11 @@ import { buildZodComponents } from './swaggerSchemas';
  * produced an empty spec whenever the server was started from any other
  * directory — which is the usual reason Swagger renders with no endpoints.
  */
-const routeGlob = path.resolve(__dirname, '..', 'routes', `*${path.extname(__filename)}`);
+const routeGlob = path
+  .resolve(__dirname, '..', 'routes', `*${path.extname(__filename)}`)
+  /* Globs need forward slashes; on Windows path.resolve gives backslashes and finds nothing. */
+  .split(path.sep)
+  .join('/');
 
 const options: swaggerJsdoc.Options = {
   definition: {
@@ -19,28 +23,38 @@ const options: swaggerJsdoc.Options = {
       title: 'Baliye API',
       version: '1.0.0',
       description:
-        'REST API for a multi-role (Admin/User) custom suit tailoring platform: ' +
-        'authentication (OTP + Google), measurements, suit design, cart, orders and order tracking.\n\n' +
-        '**How to authorise:** call `POST /auth/send-otp`, then `POST /auth/verify-otp` ' +
-        '(or `POST /auth/login` for admin). Copy `data.accessToken` from the response, ' +
-        'click **Authorize** above and paste the raw token — do not prefix it with "Bearer".',
+        'REST API behind the Baliye Couture website (https://baliyecouture.com) and its admin panel: ' +
+        'customer sign-in (Shopify customer accounts, OTP, Google), measurements, Create Your Own Design ' +
+        '(garments, steps, options, AI previews), cart and Shopify checkout, orders, returns and ' +
+        'replacements, wishlist, website content, and the admin panel (Design Builder, AI Studio, ' +
+        'team, newsletter, design credits).\n\n' +
+        'Products, prices, the cart and payment for ready-to-wear live in Shopify; this API reads them.\n\n' +
+        '**How to authorise:** call `POST /auth/login` (admin) or `POST /auth/send-otp` then ' +
+        '`POST /auth/verify-otp` (customer). Copy `data.accessToken` from the response, click ' +
+        '**Authorize** above and paste the raw token — do not prefix it with "Bearer".',
     },
     servers: [
+      { url: 'https://api.baliyecouture.com/api/v1', description: 'Production' },
       { url: `http://localhost:${env.port}${env.apiPrefix}`, description: 'Local' },
     ],
     tags: [
-      { name: 'Auth', description: 'Registration, OTP, Google and admin login' },
-      { name: 'Profile', description: 'The signed-in user’s own profile' },
+      { name: 'Auth', description: 'Customer and admin sign-in, tokens' },
+      { name: 'Profile', description: 'The signed-in customer’s own profile' },
+      { name: 'Addresses', description: 'The signed-in customer’s saved shipping addresses' },
+      { name: 'Measurements', description: 'Measurement fields (admin) and customers’ saved measurements' },
       { name: 'Catalog', description: 'Public garment types and products' },
-      { name: 'Shopify', description: 'Store connection and customer mirror' },
-      { name: 'AI Studio', description: 'Embroidery motif extraction and transfer' },
-      { name: 'Admin', description: 'Dashboard: catalog, products and users' },
-      { name: 'Content', description: 'Website copy and images edited in the admin panel' },
-      { name: 'Addresses', description: 'The signed-in user’s saved shipping addresses' },
-      { name: 'Measurements', description: 'Admin templates and user measurements' },
-      { name: 'Design', description: 'Design option catalog and saved suit designs' },
-      { name: 'Cart', description: 'Cart contents for the signed-in user' },
-      { name: 'Orders', description: 'Order placement, history, cancellation and tracking' },
+      { name: 'Design', description: 'Create Your Own Design: steps, prices, AI previews, saved designs' },
+      { name: 'Cart', description: 'Cart contents for the signed-in customer' },
+      { name: 'Orders', description: 'Checkout, order history, cancellation, returns, replacements, tracking' },
+      { name: 'Wishlist', description: 'The signed-in customer’s saved products and designs' },
+      { name: 'Notifications', description: 'The signed-in customer’s notifications' },
+      { name: 'Tokens', description: 'Design credits: the customer’s balance and use' },
+      { name: 'Settings', description: 'Public site settings, e.g. whether design credits are on' },
+      { name: 'Newsletter', description: 'Newsletter sign-up from the website' },
+      { name: 'Content', description: 'Website words and pictures edited in the admin panel' },
+      { name: 'Shopify', description: 'Store connection and customer link' },
+      { name: 'Admin', description: 'Admin panel: Design Builder, team, website content, orders, credits, newsletter' },
+      { name: 'AI Studio', description: 'Embroidery extraction, pieces, try-on and linking to the designer' },
     ],
     components: {
       securitySchemes: {

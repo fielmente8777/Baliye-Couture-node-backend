@@ -21,6 +21,7 @@ export const EMBROIDERY_REGIONS = [
   'buti',
   'hem_border',
   'lower_hem',
+  'lower_garment',
   'back',
 ] as const;
 
@@ -42,6 +43,8 @@ export const REGION_GUIDE: Record<EmbroideryRegion, string> = {
   buti: 'Buti — a small motif repeated all over the body',
   hem_border: 'Hem border (daaman) — the long border along the bottom edge',
   lower_hem: 'Lower border — a second, thinner band just above or below the hem border',
+  lower_garment:
+    'Lower garment (salwar, pajama, sharara, palazzo) — work on the bottom wear itself, such as its ankle border (mohri) or motifs down the leg, not on the kurta',
   back: 'Back — work on the back of the garment (kept for reference, not placed)',
 };
 
@@ -191,6 +194,13 @@ export const DEFAULT_PLACEMENT: Record<EmbroideryRegion, IPlacement> = {
   lower_hem: {
     anchor: 'hem_center', offset: { x: 0, y: 0.06 },
     scale: { relativeTo: 'hemWidth', factor: 1.0 },
+    align: 'bottom', rotation: 0, mirror: false, tile: true,
+  },
+  lower_garment: {
+    /* Not placed by region default: the plain garment's landmarks stop at the
+       kurta hem. Placed when the layout is copied from the source photo. */
+    anchor: 'hem_center', offset: { x: 0, y: 0.25 },
+    scale: { relativeTo: 'hemWidth', factor: 0.5 },
     align: 'bottom', rotation: 0, mirror: false, tile: true,
   },
   back: {

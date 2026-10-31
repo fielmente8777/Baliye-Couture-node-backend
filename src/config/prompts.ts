@@ -54,7 +54,10 @@ const SHEET_LAYOUT = [
   "garment seen from the front: neckline and yoke work at the top centre;",
   "shoulder work in the top-left and top-right corners; sleeve and cuff work",
   "down the far left and far right edges; chest and waist work in the middle;",
-  "hem (daaman) borders as long horizontal strips along the bottom. Work that",
+  "hem (daaman) borders as long horizontal strips along the bottom. Work on",
+  "the lower garment (salwar, pajama, sharara or palazzo: its ankle border or",
+  "motifs down the leg) is extracted too, in its own row at the very bottom of",
+  "the sheet, below the hem borders. Work that",
   "appears on the left side of the photo goes on the left of the sheet, and on",
   "the right goes on the right. If the same work appears on both sides, show",
   "it once, on the left. For small motifs repeated all over (butis), show ONE",
@@ -215,7 +218,7 @@ const sheetEmbroideryRule = (imageIndex?: number) => {
   const sheet = imageIndex ? `image ${imageIndex}` : 'the embroidery sheet';
   return [
     `Embroidery: ${sheet} is a flat sheet of the EXACT embroidery pieces on white. It is a copy job, not a design job.`,
-    'The sheet is laid out like the garment seen from the front: top centre = neckline and yoke; top corners = shoulders; far left and right edges = sleeves and cuffs; middle = chest and waist; long strips along the bottom = hem borders. A piece shown once on the left that is listed for both sides goes on both sides, mirrored.',
+    'The sheet is laid out like the garment seen from the front: top centre = neckline and yoke; top corners = shoulders; far left and right edges = sleeves and cuffs; middle = chest and waist; long strips along the bottom = hem borders; the very bottom row = work on the lower garment (salwar, pajama, sharara). A piece shown once on the left that is listed for both sides goes on both sides, mirrored.',
     'Do it in this order:',
     '1. Remove every existing embroidery, print, lace and trim from the garment in image 1 so the fabric is plain.',
     '2. Put each listed piece in its listed place, and only there. Copy each one faithfully: same motif shapes and outlines, same number and spacing of repeats, same thread and stone colours, same metallic or matt finish, same bead, sequin and mirror placement. A motif must still be recognisable as the same motif side by side with the sheet.',
