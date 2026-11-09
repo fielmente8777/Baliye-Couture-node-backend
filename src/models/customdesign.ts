@@ -46,6 +46,13 @@ export interface ICustomDesign extends Document {
   /** Free-text tailoring notes (§18). */
   instructions?: string;
 
+  /**
+   * The finished design's picture: the designer's AI preview, or the product
+   * photo when nothing was changed from it. Linked on the Shopify order line
+   * so the workshop sees what to make.
+   */
+  previewImageUrl?: string;
+
   pricing: IPriceBreakdown;
   isDeleted: boolean;
   createdAt: Date;
@@ -78,6 +85,7 @@ const customDesignSchema = new Schema<ICustomDesign>(
     sizeOptionId: { type: Schema.Types.ObjectId, ref: 'Option' },
 
     instructions: { type: String, maxlength: 1000 },
+    previewImageUrl: { type: String, maxlength: 2000 },
 
     pricing: {
       basePrice: { type: Number, required: true },

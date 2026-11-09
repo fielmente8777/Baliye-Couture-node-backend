@@ -26,6 +26,13 @@ export interface IEmbroideryCollection extends Document {
   dupattaOptionIds: Types.ObjectId[];
   /** Optional. Empty = every colour. */
   colourOptionIds: Types.ObjectId[];
+  /** Optional. Size options it is made in. Empty = every size. */
+  sizeOptionIds: Types.ObjectId[];
+  /**
+   * Optional. Body shape ids (Admin → Size & fit guide, e.g. "pear") it
+   * flatters: customers who picked one see "Suits you" on it.
+   */
+  bodyShapeIds: string[];
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -42,6 +49,8 @@ const embroideryCollectionSchema = new Schema<IEmbroideryCollection>(
     lowerOptionIds: optionIds,
     dupattaOptionIds: optionIds,
     colourOptionIds: optionIds,
+    sizeOptionIds: optionIds,
+    bodyShapeIds: [{ type: String, trim: true }],
     notes: { type: String, trim: true },
   },
   { timestamps: true }

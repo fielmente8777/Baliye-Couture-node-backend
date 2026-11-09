@@ -16,6 +16,8 @@ const designBody = {
   measurementProfileId: objectId.optional(),
   sizeOptionId: objectId.optional(),
   instructions: z.string().max(1000).optional(),
+  /** The finished design's picture (AI preview or product photo), https only. */
+  previewImageUrl: z.string().url().max(2000).startsWith('https://').optional(),
 };
 
 export const designConfigQuerySchema = z.object({

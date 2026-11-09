@@ -14,6 +14,9 @@ const pairingFields = {
   lowerOptionIds: optionIds,
   dupattaOptionIds: optionIds,
   colourOptionIds: optionIds,
+  sizeOptionIds: optionIds,
+  /** Body shape ids from the Size & fit guide; not designer options. */
+  bodyShapeIds: z.array(z.string().trim().min(1).max(60)).max(20).optional(),
 };
 
 export const buildAssetsSchema = z.object({

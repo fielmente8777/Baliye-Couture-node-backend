@@ -132,6 +132,9 @@ export async function startDesignCheckout(userId: string, shippingAddressId: str
         ? { key: 'Measurements', value: `${profile.profileName}: ${formatMeasurements(profile)}` }
         : { key: 'Fit', value: 'Standard size' },
       ...(design.instructions ? [{ key: 'Instructions', value: design.instructions }] : []),
+      /* A link, shown under the line in Shopify admin: custom lines can't
+         carry a product image. */
+      ...(design.previewImageUrl ? [{ key: 'Design image', value: design.previewImageUrl }] : []),
       { key: 'Design ID', value: design._id.toString() },
     ];
 

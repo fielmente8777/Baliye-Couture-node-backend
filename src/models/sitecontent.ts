@@ -7,7 +7,8 @@ import { Schema, model, Document, Types } from 'mongoose';
  * frontend ships with (e.g. homePageData), so a page never breaks when
  * nothing has been saved yet: the frontend falls back section by section.
  */
-export const CONTENT_PAGES = ['home', 'footer', 'terms', 'products'] as const;
+/** 'guides': the designer's size chart and fit advice (Admin → Size & fit guide). */
+export const CONTENT_PAGES = ['home', 'footer', 'terms', 'products', 'guides'] as const;
 export type ContentPage = (typeof CONTENT_PAGES)[number];
 
 export interface ISiteContent extends Document {

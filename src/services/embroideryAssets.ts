@@ -73,6 +73,8 @@ export interface BuildAssetsInput {
   lowerOptionIds?: string[];
   dupattaOptionIds?: string[];
   colourOptionIds?: string[];
+  sizeOptionIds?: string[];
+  bodyShapeIds?: string[];
   notes?: string;
   /**
    * Ink colour of the source garment's embroidery, if known. Supplying it
@@ -150,7 +152,7 @@ export async function buildAssetsFromJob(
     collectionId = input.collectionId;
     input.collectionName = existing.collectionName;
   } else {
-    const details: CollectionDetailsInput = { notes: input.notes };
+    const details: CollectionDetailsInput = { notes: input.notes, bodyShapeIds: input.bodyShapeIds };
     for (const { field } of PAIRING_FIELDS) details[field] = input[field] ?? [];
     await saveCollectionDetails(collectionId, details);
   }
@@ -258,6 +260,7 @@ export function listCollections() {
           PAIRING_FIELDS.map(({ field }) => [field, { $ifNull: [{ $first: `$details.${field}` }, []] }])
         ),
         notes: { $ifNull: [{ $first: '$details.notes' }, ''] },
+        bodyShapeIds: { $ifNull: [{ $first: '$details.bodyShapeIds' }, []] },
       },
     },
     { $project: { details: 0 } },
@@ -280,10 +283,11 @@ export const PAIRING_FIELDS = [
   { field: 'lowerOptionIds', code: 'lower', label: 'lower' },
   { field: 'dupattaOptionIds', code: 'dupatta', label: 'dupatta' },
   { field: 'colourOptionIds', code: 'color', label: 'colour' },
+  { field: 'sizeOptionIds', code: 'size', label: 'size' },
 ] as const;
 
 export type PairingField = (typeof PAIRING_FIELDS)[number]['field'];
-export type CollectionDetailsInput = Partial<Record<PairingField, string[]>> & { notes?: string };
+export type CollectionDetailsInput = Partial<Record<PairingField, string[]>> & { notes?: string; bodyShapeIds?: string[] };
 
 const PAIRING_SELECT = PAIRING_FIELDS.map((f) => f.field).join(' ');
 
@@ -390,6 +394,7 @@ export async function saveCollectionDetails(collectionId: string, data: Collecti
   }
 
   if (data.notes !== undefined) set.notes = data.notes.trim();
+  if (data.bodyShapeIds !== undefined) set.bodyShapeIds = [...new Set(data.bodyShapeIds)];
   if (!Object.keys(set).length) return;
 
   await EmbroideryCollectionModel.updateOne({ collectionId }, { $set: set }, { upsert: true }).exec();
@@ -575,6 +580,8 @@ export interface CollectionLook {
   layout: string;
   /** The admin's notes on the whole embroidery, if any. */
   notes?: string;
+  /** Body shape ids it flatters (Size & fit guide), if the admin ticked any. */
+  bodyShapes: string[];
 }
 
 const SIDE_WORDS: Record<EmbroiderySide, string> = {
@@ -603,8 +610,9 @@ export async function collectionLooks(collectionIds: string[]): Promise<Map<stri
   const jobIds = [...new Set(pieces.map((p) => p.sourceJobId?.toString()).filter(Boolean))];
   const jobs = await ImageJobModel.find({ _id: { $in: jobIds } }).select('resultUrls').lean().exec();
   const sheetOf = new Map(jobs.map((j) => [j._id.toString(), j.resultUrls?.[0]]));
-  const details = await EmbroideryCollectionModel.find({ collectionId: { $in: ids } }).select('collectionId notes').lean().exec();
+  const details = await EmbroideryCollectionModel.find({ collectionId: { $in: ids } }).select('collectionId notes bodyShapeIds').lean().exec();
   const notesOf = new Map(details.map((d) => [d.collectionId, d.notes?.trim() || undefined]));
+  const shapesOf = new Map(details.map((d) => [d.collectionId, d.bodyShapeIds ?? []]));
 
   for (const id of ids) {
     const own = pieces.filter((p) => p.collectionId === id);
@@ -621,7 +629,7 @@ export async function collectionLooks(collectionIds: string[]): Promise<Map<stri
         return `(${i + 1}) ${p.name}${made ? ` [${made}]` : ''}: ${region.toLowerCase()}${detail ? `, ${detail}` : ''}, ${SIDE_WORDS[p.side]}`;
       })
       .join('; ');
-    looks.set(id, { cover: sheet || own[0].assetUrl, layout, notes: notesOf.get(id) });
+    looks.set(id, { cover: sheet || own[0].assetUrl, layout, notes: notesOf.get(id), bodyShapes: shapesOf.get(id) ?? [] });
   }
   return looks;
 }

@@ -13,6 +13,7 @@ import { GarmentTypeModel } from '@models/garmenttype';
 import { ProductModel } from '@models/product';
 import { IOptionConfig } from '@models/optionconfig';
 import { ApiError } from '@utils/apiError';
+import { env } from '@config/env';
 import * as measurementService from './measurement';
 import { collectionLooks } from './embroideryAssets';
 import {
@@ -31,6 +32,26 @@ export interface DesignInput {
   measurementProfileId?: string;
   sizeOptionId?: string;
   instructions?: string;
+  previewImageUrl?: string;
+}
+
+/**
+ * Only pictures this shop made or hosts are kept: Shopify's CDN (AI previews
+ * and product photos) or this server's own uploads. Anything else is dropped
+ * rather than refused — the design itself is still fine to save — so a
+ * customer can't put an arbitrary link on a Shopify order.
+ */
+function trustedImageUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    const { protocol, hostname, href } = new URL(url);
+    if (protocol !== 'https:') return undefined;
+    if (hostname === 'cdn.shopify.com') return href;
+    if (env.publicUrl && href.startsWith(`${env.publicUrl.replace(/\/$/, '')}/uploads/`)) return href;
+  } catch {
+    /* Not a URL. */
+  }
+  return undefined;
 }
 
 /**
@@ -146,6 +167,8 @@ export async function getDesignConfig(input: {
         image: (o.assetCollectionId && looks.get(o.assetCollectionId)?.cover) || o.image,
         /* The picture above comes from AI Studio and wins over the Design Builder's. */
         fromStudio: Boolean(o.assetCollectionId && looks.has(o.assetCollectionId)),
+        /* Body shapes ticked for it in AI Studio: "Suits you" for those customers. */
+        suitsShapes: (o.assetCollectionId && looks.get(o.assetCollectionId)?.bodyShapes) || [],
         hex: o.hex,
         priceModifier: o.priceModifier,
         /* Lets the stepper hide unpaired embroidery as soon as Neck is picked. */
@@ -183,6 +206,7 @@ export async function createDesign(userId: string, input: DesignInput): Promise<
     measurementProfileId: input.measurementProfileId,
     sizeOptionId: input.sizeOptionId,
     instructions: input.instructions,
+    previewImageUrl: trustedImageUrl(input.previewImageUrl),
     pricing,
   });
 }
